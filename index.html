@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeighborHelp</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Заголовок -->
+        <header class="header">
+            <h1>🏠 NeighborHelp</h1>
+            <p class="subtitle">Найдите помощь рядом с домом</p>
+            <div class="user-info" id="userInfo">
+                <span id="userName">Загружаем...</span>
+            </div>
+        </header>
+
+        <!-- Переключатель услуги/просьбы -->
+        <div class="view-switcher">
+            <button class="switch-btn active" id="servicesBtn" data-view="services">
+                <span>💼</span> Услуги
+            </button>
+            <button class="switch-btn" id="requestsBtn" data-view="requests">
+                <span>🔍</span> Просьбы
+            </button>
+        </div>
+
+        <!-- Поиск -->
+        <div class="search-section">
+            <input type="text" id="searchInput" placeholder="Поиск услуг..." class="search-input">
+            <button class="location-btn" id="locationBtn">📍 Мое местоположение</button>
+        </div>
+
+        <!-- Категории услуг -->
+        <section class="categories">
+            <h2>Категории услуг</h2>
+            <div class="category-grid">
+                <div class="category-card" data-category="animals">
+                    <div class="category-icon">🐕</div>
+                    <h3>Животные</h3>
+                    <p>300-3000₽</p>
+                </div>
+                <div class="category-card" data-category="delivery">
+                    <div class="category-icon">📦</div>
+                    <h3>Доставка</h3>
+                    <p>150-500₽</p>
+                </div>
+                <div class="category-card" data-category="home">
+                    <div class="category-icon">🏠</div>
+                    <h3>Дом и быт</h3>
+                    <p>200-3000₽</p>
+                </div>
+                <div class="category-card" data-category="elderly">
+                    <div class="category-icon">👴</div>
+                    <h3>Помощь пожилым</h3>
+                    <p>200-800₽</p>
+                </div>
+                <div class="category-card" data-category="transport">
+                    <div class="category-icon">🚗</div>
+                    <h3>Транспорт</h3>
+                    <p>800-2000₽</p>
+                </div>
+                <div class="category-card" data-category="services">
+                    <div class="category-icon">🛠️</div>
+                    <h3>Профуслуги</h3>
+                    <p>400-1500₽</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Список услуг -->
+        <section class="services" id="servicesList">
+            <h2>Доступные услуги</h2>
+            <div class="services-grid" id="servicesGrid">
+                <!-- Услуги будут добавлены через JavaScript -->
+            </div>
+        </section>
+
+        <!-- Кнопки действий -->
+        <div class="action-buttons">
+            <button class="btn btn-primary" id="addServiceBtn">+ Добавить услугу</button>
+            <button class="btn btn-secondary" id="myServicesBtn">Мои услуги</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
