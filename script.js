@@ -153,7 +153,7 @@ async function loadServicesFromGoogleSheets() {
 document.addEventListener('DOMContentLoaded', function() {
     initTelegramApp();
     setupEventListeners();
-    loadServices();
+    loadServicesWithView(currentView);
     updateUserInfo();
 });
 
@@ -357,52 +357,6 @@ function updateSearchPlaceholder(text) {
     }
 }
 
-// Загрузка услуг
-async function loadServices(filter = '') {
-    const servicesGrid = document.getElementById('servicesGrid');
-    
-    if (servicesGrid) {
-        servicesGrid.innerHTML = '<p style="text-align: center; color: #666;">Загружаем услуги...</p>';
-    }
-    
-    try {
-        let services = await loadServicesFromGoogleSheets();
-        
-        if (filter) {
-            services = services.filter(service =>
-                service.title.toLowerCase().includes(filter.toLowerCase()) ||
-                service.description.toLowerCase().includes(filter.toLowerCase()) ||
-                service.provider.toLowerCase().includes(filter.toLowerCase())
-            );
-        }
-        
-        if (servicesGrid) {
-            servicesGrid.innerHTML = '';
-            
-            if (services.length === 0) {
-                servicesGrid.innerHTML = '<p style="text-align: center; color: #666;">Услуги не найдены</p>';
-                return;
-            }
-            
-            services.forEach(service => {
-                const serviceCard = createServiceCard(service);
-                servicesGrid.appendChild(serviceCard);
-            });
-        }
-        
-    } catch (error) {
-        console.error('Ошибка загрузки услуг:', error);
-        if (servicesGrid) {
-            servicesGrid.innerHTML = '<p style="text-align: center; color: #ff6b6b;">Ошибка загрузки. Показываем тестовые данные.</p>';
-            
-            const services = currentView === 'services' ? mockServices : mockRequests;
-            services.forEach(service => {
-                const serviceCard = createServiceCard(service);
-                servicesGrid.appendChild(serviceCard);
-            });
-        }
-    }
-}
 
 // Создание карточки услуги
 function createServiceCard(service) {
@@ -439,7 +393,7 @@ function createServiceCard(service) {
 // Поиск услуг
 function handleSearch(event) {
     const query = event.target.value;
-    loadServices(query);
+    loadServicesWithView(currentView, query); // вместо loadServices(query)
 }
 
 // Фильтрация по категории
@@ -450,7 +404,7 @@ async function filterByCategory(category) {
     }
     
     try {
-        const allServices = await loadServicesFromGoogleSheets();
+        allServices = await loadServicesWithView(currentView);
         const filteredServices = allServices.filter(service => service.category === category);
         
         if (servicesGrid) {
