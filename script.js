@@ -225,7 +225,6 @@ function setupEventListeners() {
     }
 }
 
-// Переключение между услугами и просьбами
 function switchView(view) {
     currentView = view;
     
@@ -250,8 +249,104 @@ function switchView(view) {
         updateSearchPlaceholder('Поиск просьб...');
     }
     
-    // Перезагружаем данные
-    loadServices();
+    // Загружаем данные с явным указанием типа
+    loadServicesWithView(view);
+}
+
+// Функция загрузки данных с указанием типа просмотра
+async function loadServicesWithView(viewType, filter = '') {
+   const servicesGrid = document.getElementById('servicesGrid');
+   
+   // Определяем какой лист загружать
+   const sheetName = viewType === 'services' ? 
+       GOOGLE_SHEETS_CONFIG.servicesSheetName : 
+       GOOGLE_SHEETS_CONFIG.requestsSheetName;
+   
+   if (servicesGrid) {
+       servicesGrid.innerHTML = '<p style="text-align: center; color: #666;">Загружаем данные...</p>';
+   }
+   
+   try {
+       const url = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
+       
+       console.log(`Загружаем данные из: ${url}`);
+       
+       const response = await fetch(url);
+       
+       if (!response.ok) {
+           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+       }
+       
+       const csvText = await response.text();
+       console.log('Получен CSV:', csvText.substring(0, 200) + '...');
+       
+       const rows = parseCSV(csvText);
+       
+       if (!rows || rows.length <= 1) {
+           console.log(`Нет данных в листе ${sheetName}, используем статичные данные`);
+           const fallbackData = viewType === 'services' ? mockServices : mockRequests;
+           displayServices(fallbackData, filter, servicesGrid);
+           return;
+       }
+       
+       const services = [];
+       for (let i = 1; i < rows.length; i++) {
+           const row = rows[i];
+           if (row[0] && row[0].trim()) {
+               services.push({
+                   id: i,
+                   title: row[0] || 'Без названия',
+                   description: row[1] || 'Описание отсутствует',
+                   category: row[2] || 'services',
+                   price: row[3] || 'По договоренности',
+                   provider: row[4] || 'Аноним',
+                   contact: row[5] || '@unknown',
+                   rating: parseFloat(row[6]) || (viewType === 'requests' ? 0 : 4.0),
+                   location: row[7] || 'Не указан',
+                   distance: Math.round(Math.random() * 30) / 10
+               });
+           }
+       }
+       
+       console.log(`Загружено ${services.length} записей из ${sheetName}`);
+       displayServices(services, filter, servicesGrid);
+       
+   } catch (error) {
+       console.error(`Ошибка при загрузке из ${sheetName}:`, error);
+       if (servicesGrid) {
+           servicesGrid.innerHTML = '<p style="text-align: center; color: #ff6b6b;">Ошибка загрузки. Показываем тестовые данные.</p>';
+           
+           const fallbackData = viewType === 'services' ? mockServices : mockRequests;
+           displayServices(fallbackData, filter, servicesGrid);
+       }
+   }
+}
+
+// Вспомогательная функция отображения услуг
+function displayServices(services, filter, servicesGrid) {
+   let filteredServices = services;
+   
+   if (filter) {
+       filteredServices = services.filter(service =>
+           service.title.toLowerCase().includes(filter.toLowerCase()) ||
+           service.description.toLowerCase().includes(filter.toLowerCase()) ||
+           service.provider.toLowerCase().includes(filter.toLowerCase())
+       );
+   }
+   
+   if (servicesGrid) {
+       servicesGrid.innerHTML = '';
+       
+       if (filteredServices.length === 0) {
+           servicesGrid.innerHTML = '<p style="text-align: center; color: #666;">Данные не найдены</p>';
+           return;
+       }
+       
+       filteredServices.forEach(service => {
+           const serviceCard = createServiceCard(service);
+           servicesGrid.appendChild(serviceCard);
+       });
+   }
 }
 
 // Обновление placeholder для поиска
