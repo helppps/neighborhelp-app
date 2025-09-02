@@ -3,16 +3,17 @@ let tg = window.Telegram?.WebApp;
 let user = null;
 let userLocation = null;
 
-// Конфигурация Google Sheets (ЕДИНСТВЕННАЯ правильная)
+// Конфигурация Google Sheets (один лист)
 const GOOGLE_SHEETS_CONFIG = {
     spreadsheetId: '1kT_6xZd-kcpVhAdOBg9i6E6deRqRnu_J8SqzkPr7OeM',
-    servicesSheetName: 'Services',
-    requestsSheetName: 'Requests', 
-    formResponsesSheetName: 'FormResponses'
+    sheetName: 'Services' // Используем только один лист
 };
 
 // Текущий режим просмотра
 let currentView = 'services';
+
+// Кэш данных
+let allData = [];
 
 // Статические данные услуг (резервные)
 const mockServices = [
@@ -25,7 +26,8 @@ const mockServices = [
         rating: 4.8,
         distance: 0.3,
         provider: "Мария К.",
-        contact: "@maria_dog_walker"
+        contact: "@maria_dog_walker",
+        type: "service"
     },
     {
         id: 2,
@@ -36,18 +38,8 @@ const mockServices = [
         rating: 4.9,
         distance: 0.5,
         provider: "Алексей П.",
-        contact: "@alex_delivery"
-    },
-    {
-        id: 3,
-        title: "Мелкий ремонт",
-        description: "Поклейка обоев, сборка мебели, электрика",
-        price: "800₽/час",
-        category: "home",
-        rating: 4.7,
-        distance: 0.8,
-        provider: "Сергей М.",
-        contact: "@sergey_master"
+        contact: "@alex_delivery",
+        type: "service"
     }
 ];
 
@@ -62,7 +54,8 @@ const mockRequests = [
         rating: 0,
         distance: 0.4,
         provider: "Елена М.",
-        contact: "@elena_dog_owner"
+        contact: "@elena_dog_owner",
+        type: "request"
     },
     {
         id: 2,
@@ -73,7 +66,8 @@ const mockRequests = [
         rating: 0,
         distance: 0.7,
         provider: "Анна Петровна",
-        contact: "@anna_babushka"
+        contact: "@anna_babushka",
+        type: "request"
     }
 ];
 
@@ -94,16 +88,12 @@ function parseCSV(text) {
     return result;
 }
 
-// Функция для загрузки данных из Google Sheets
-async function loadServicesFromGoogleSheets() {
-    const sheetName = currentView === 'services' ? 
-        GOOGLE_SHEETS_CONFIG.servicesSheetName : 
-        GOOGLE_SHEETS_CONFIG.requestsSheetName;
-    
+// Функция загрузки всех данных из Google Sheets
+async function loadAllDataFromGoogleSheets() {
     try {
-        const url = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
+        const url = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${GOOGLE_SHEETS_CONFIG.sheetName}`;
         
-        console.log(`Загружаем данные из: ${url}`);
+        console.log(`Загружаем все данные из: ${url}`);
         
         const response = await fetch(url);
         
@@ -117,15 +107,15 @@ async function loadServicesFromGoogleSheets() {
         const rows = parseCSV(csvText);
         
         if (!rows || rows.length <= 1) {
-            console.log(`Нет данных в листе ${sheetName}, используем статичные данные`);
-            return currentView === 'services' ? mockServices : mockRequests;
+            console.log('Нет данных в таблице, используем статичные данные');
+            return [...mockServices, ...mockRequests];
         }
         
-        const services = [];
+        const allItems = [];
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
             if (row[0] && row[0].trim()) {
-                services.push({
+                allItems.push({
                     id: i,
                     title: row[0] || 'Без названия',
                     description: row[1] || 'Описание отсутствует',
@@ -135,25 +125,31 @@ async function loadServicesFromGoogleSheets() {
                     contact: row[5] || '@unknown',
                     rating: parseFloat(row[6]) || 4.0,
                     location: row[7] || 'Не указан',
+                    type: (row[8] || 'service').toLowerCase(), // Новая колонка Type
                     distance: Math.round(Math.random() * 30) / 10
                 });
             }
         }
         
-        console.log(`Загружено ${services.length} записей из ${sheetName}`);
-        return services;
+        console.log(`Загружено ${allItems.length} записей из Google Sheets`);
+        return allItems;
         
     } catch (error) {
-        console.error(`Ошибка при загрузке из ${sheetName}:`, error);
-        return currentView === 'services' ? mockServices : mockRequests;
+        console.error('Ошибка при загрузке из Google Sheets:', error);
+        return [...mockServices, ...mockRequests];
     }
+}
+
+// Функция фильтрации данных по типу
+function filterDataByType(data, type) {
+    return data.filter(item => item.type === type);
 }
 
 // Инициализация приложения
 document.addEventListener('DOMContentLoaded', function() {
     initTelegramApp();
     setupEventListeners();
-    loadServicesWithView(currentView);
+    loadServices();
     updateUserInfo();
 });
 
@@ -225,6 +221,7 @@ function setupEventListeners() {
     }
 }
 
+// Переключение между услугами и просьбами
 function switchView(view) {
     currentView = view;
     
@@ -249,114 +246,70 @@ function switchView(view) {
         updateSearchPlaceholder('Поиск просьб...');
     }
     
-    // Загружаем данные с явным указанием типа
-    loadServicesWithView(view);
+    // Перезагружаем данные с фильтрацией
+    loadServices();
 }
 
-// Функция загрузки данных с указанием типа просмотра
-async function loadServicesWithView(viewType, filter = '') {
-   const servicesGrid = document.getElementById('servicesGrid');
-   
-   // Определяем какой лист загружать
-   const sheetName = viewType === 'services' ? 
-       GOOGLE_SHEETS_CONFIG.servicesSheetName : 
-       GOOGLE_SHEETS_CONFIG.requestsSheetName;
-   
-   if (servicesGrid) {
-       servicesGrid.innerHTML = '<p style="text-align: center; color: #666;">Загружаем данные...</p>';
-   }
-   
-   try {
-       const url = `https://docs.google.com/spreadsheets/d/${GOOGLE_SHEETS_CONFIG.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${sheetName}`;
-       
-       console.log(`Загружаем данные из: ${url}`);
-       
-       const response = await fetch(url);
-       
-       if (!response.ok) {
-           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-       }
-       
-       const csvText = await response.text();
-       console.log('Получен CSV:', csvText.substring(0, 200) + '...');
-       
-       const rows = parseCSV(csvText);
-       
-       if (!rows || rows.length <= 1) {
-           console.log(`Нет данных в листе ${sheetName}, используем статичные данные`);
-           const fallbackData = viewType === 'services' ? mockServices : mockRequests;
-           displayServices(fallbackData, filter, servicesGrid);
-           return;
-       }
-       
-       const services = [];
-       for (let i = 1; i < rows.length; i++) {
-           const row = rows[i];
-           if (row[0] && row[0].trim()) {
-               services.push({
-                   id: i,
-                   title: row[0] || 'Без названия',
-                   description: row[1] || 'Описание отсутствует',
-                   category: row[2] || 'services',
-                   price: row[3] || 'По договоренности',
-                   provider: row[4] || 'Аноним',
-                   contact: row[5] || '@unknown',
-                   rating: parseFloat(row[6]) || (viewType === 'requests' ? 0 : 4.0),
-                   location: row[7] || 'Не указан',
-                   distance: Math.round(Math.random() * 30) / 10
-               });
-           }
-       }
-       
-       console.log(`Загружено ${services.length} записей из ${sheetName}`);
-       displayServices(services, filter, servicesGrid);
-       
-   } catch (error) {
-       console.error(`Ошибка при загрузке из ${sheetName}:`, error);
-       if (servicesGrid) {
-           servicesGrid.innerHTML = '<p style="text-align: center; color: #ff6b6b;">Ошибка загрузки. Показываем тестовые данные.</p>';
-           
-           const fallbackData = viewType === 'services' ? mockServices : mockRequests;
-           displayServices(fallbackData, filter, servicesGrid);
-       }
-   }
-}
-
-// Вспомогательная функция отображения услуг
-function displayServices(services, filter, servicesGrid) {
-   let filteredServices = services;
-   
-   if (filter) {
-       filteredServices = services.filter(service =>
-           service.title.toLowerCase().includes(filter.toLowerCase()) ||
-           service.description.toLowerCase().includes(filter.toLowerCase()) ||
-           service.provider.toLowerCase().includes(filter.toLowerCase())
-       );
-   }
-   
-   if (servicesGrid) {
-       servicesGrid.innerHTML = '';
-       
-       if (filteredServices.length === 0) {
-           servicesGrid.innerHTML = '<p style="text-align: center; color: #666;">Данные не найдены</p>';
-           return;
-       }
-       
-       filteredServices.forEach(service => {
-           const serviceCard = createServiceCard(service);
-           servicesGrid.appendChild(serviceCard);
-       });
-   }
-}
-
-// Обновление placeholder для поиска
-function updateSearchPlaceholder(text) {
-    const searchInput = document.getElementById('searchInput');
-    if (searchInput) {
-        searchInput.placeholder = text;
+// Загрузка и отображение услуг
+async function loadServices(filter = '') {
+    const servicesGrid = document.getElementById('servicesGrid');
+    
+    if (servicesGrid) {
+        servicesGrid.innerHTML = '<p style="text-align: center; color: #666;">Загружаем данные...</p>';
+    }
+    
+    try {
+        // Загружаем все данные, если еще не загружены
+        if (allData.length === 0) {
+            allData = await loadAllDataFromGoogleSheets();
+        }
+        
+        // Фильтруем по типу (services/requests)
+        const typeFilter = currentView === 'services' ? 'service' : 'request';
+        let filteredData = filterDataByType(allData, typeFilter);
+        
+        console.log(`Отфильтровано ${filteredData.length} записей типа "${typeFilter}"`);
+        
+        // Применяем текстовый фильтр поиска
+        if (filter) {
+            filteredData = filteredData.filter(item =>
+                item.title.toLowerCase().includes(filter.toLowerCase()) ||
+                item.description.toLowerCase().includes(filter.toLowerCase()) ||
+                item.provider.toLowerCase().includes(filter.toLowerCase())
+            );
+        }
+        
+        displayServices(filteredData, servicesGrid);
+        
+    } catch (error) {
+        console.error('Ошибка загрузки данных:', error);
+        if (servicesGrid) {
+            servicesGrid.innerHTML = '<p style="text-align: center; color: #ff6b6b;">Ошибка загрузки. Показываем тестовые данные.</p>';
+            
+            // Показываем статичные данные при ошибке
+            const fallbackData = currentView === 'services' ? mockServices : mockRequests;
+            displayServices(fallbackData, servicesGrid);
+        }
     }
 }
 
+// Функция отображения услуг
+function displayServices(services, servicesGrid) {
+    if (servicesGrid) {
+        servicesGrid.innerHTML = '';
+        
+        if (services.length === 0) {
+            const message = currentView === 'services' ? 'Услуги не найдены' : 'Просьбы не найдены';
+            servicesGrid.innerHTML = `<p style="text-align: center; color: #666;">${message}</p>`;
+            return;
+        }
+        
+        services.forEach(service => {
+            const serviceCard = createServiceCard(service);
+            servicesGrid.appendChild(serviceCard);
+        });
+    }
+}
 
 // Создание карточки услуги
 function createServiceCard(service) {
@@ -390,10 +343,10 @@ function createServiceCard(service) {
     return card;
 }
 
-// Поиск услуг
+// Поиск
 function handleSearch(event) {
     const query = event.target.value;
-    loadServicesWithView(currentView, query); // вместо loadServices(query)
+    loadServices(query);
 }
 
 // Фильтрация по категории
@@ -404,34 +357,23 @@ async function filterByCategory(category) {
     }
     
     try {
-        allServices = await loadServicesWithView(currentView);
-        const filteredServices = allServices.filter(service => service.category === category);
-        
-        if (servicesGrid) {
-            servicesGrid.innerHTML = '';
-            
-            if (filteredServices.length === 0) {
-                servicesGrid.innerHTML = '<p style="text-align: center; color: #666;">В этой категории пока нет услуг</p>';
-                return;
-            }
-            
-            filteredServices.forEach(service => {
-                const serviceCard = createServiceCard(service);
-                servicesGrid.appendChild(serviceCard);
-            });
+        // Загружаем все данные, если еще не загружены
+        if (allData.length === 0) {
+            allData = await loadAllDataFromGoogleSheets();
         }
+        
+        // Фильтруем по типу и категории
+        const typeFilter = currentView === 'services' ? 'service' : 'request';
+        const filteredData = allData.filter(item => 
+            item.type === typeFilter && item.category === category
+        );
+        
+        displayServices(filteredData, servicesGrid);
         
     } catch (error) {
         const services = currentView === 'services' ? mockServices : mockRequests;
         const filteredServices = services.filter(service => service.category === category);
-        if (servicesGrid) {
-            servicesGrid.innerHTML = '';
-            
-            filteredServices.forEach(service => {
-                const serviceCard = createServiceCard(service);
-                servicesGrid.appendChild(serviceCard);
-            });
-        }
+        displayServices(filteredServices, servicesGrid);
     }
     
     const servicesList = document.getElementById('servicesList');
@@ -440,7 +382,15 @@ async function filterByCategory(category) {
     }
 }
 
-// Остальные функции остаются без изменений
+// Обновление placeholder для поиска
+function updateSearchPlaceholder(text) {
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.placeholder = text;
+    }
+}
+
+// Остальные функции
 function requestLocation() {
     const locationBtn = document.getElementById('locationBtn');
     if (locationBtn) {
@@ -579,7 +529,7 @@ function showAddServiceForm() {
                 provider: document.getElementById('serviceProvider').value,
                 contact: document.getElementById('serviceContact').value,
                 location: document.getElementById('serviceLocation').value,
-                type: currentView
+                type: currentView === 'requests' ? 'request' : 'service'
             };
             
             if (tg) {
@@ -623,4 +573,4 @@ if (tg) {
     });
 }
 
-console.log('NeighborHelp app с Google Sheets интеграцией загружен!');
+console.log('NeighborHelp app с упрощенной Google Sheets интеграцией загружен!');
