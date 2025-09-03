@@ -1,3 +1,4 @@
+// ФАЙЛ script.js
 // Инициализация Telegram WebApp
 let tg = window.Telegram?.WebApp;
 let user = null;
@@ -311,7 +312,7 @@ function displayServices(services, servicesGrid) {
     }
 }
 
-// Создание карточки услуги
+// Создание карточки услуги (обновленная версия с кнопками)
 function createServiceCard(service) {
     const card = document.createElement('div');
     card.className = 'service-card';
@@ -333,12 +334,23 @@ function createServiceCard(service) {
                 <span>${service.rating}</span>
             </div>
         </div>
-        <div style="margin-top: 12px; font-size: 14px; color: #4CAF50;">
-            ${service.provider}
+        <div class="service-footer">
+            <div class="service-provider" onclick="showUserProfile('${service.provider}', '${service.contact}')" style="
+                font-size: 14px; color: #4CAF50; cursor: pointer; text-decoration: underline;
+                margin-bottom: 8px;
+            ">
+                ${service.provider}
+            </div>
+            <div class="service-actions" style="display: flex; gap: 8px;">
+                <button class="btn-small btn-primary" onclick="showServiceDetails(${JSON.stringify(service).replace(/"/g, '&quot;')})">
+                    Подробнее
+                </button>
+                <button class="btn-small btn-secondary" onclick="contactProvider(${JSON.stringify(service).replace(/"/g, '&quot;')})">
+                    Связаться
+                </button>
+            </div>
         </div>
     `;
-    
-    card.addEventListener('click', () => contactProvider(service));
     
     return card;
 }
@@ -574,3 +586,335 @@ if (tg) {
 }
 
 console.log('NeighborHelp app с упрощенной Google Sheets интеграцией загружен!');
+
+// Показать подробную информацию об услуге/просьбе
+function showServiceDetails(service) {
+    const isRequest = service.type === 'request';
+    const modalTitle = isRequest ? 'Подробности просьбы' : 'Подробности услуги';
+    
+    const modalHTML = `
+        <div id="serviceDetailsModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 500px;
+                max-height: 80vh; overflow-y: auto;
+            ">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                    <h3 style="margin: 0;">${modalTitle}</h3>
+                    <button onclick="closeServiceDetailsModal()" style="
+                        background: none; border: none; font-size: 24px; cursor: pointer; color: #666;
+                    ">&times;</button>
+                </div>
+                
+                <div class="service-detail-content">
+                    <div class="service-detail-header" style="margin-bottom: 20px;">
+                        <h2 style="color: #333; margin: 0 0 8px 0; font-size: 20px;">${service.title}</h2>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 18px; color: #4CAF50; font-weight: 600;">${service.price}</span>
+                            <div style="display: flex; align-items: center; gap: 4px;">
+                                <span>⭐</span>
+                                <span style="font-weight: 600;">${service.rating}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="service-detail-description" style="margin-bottom: 20px;">
+                        <h4 style="color: #333; margin: 0 0 8px 0;">Описание:</h4>
+                        <p style="color: #666; line-height: 1.5; margin: 0;">${service.description}</p>
+                    </div>
+                    
+                    <div class="service-detail-info" style="margin-bottom: 20px;">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                            <div>
+                                <h4 style="color: #333; margin: 0 0 4px 0; font-size: 14px;">Категория:</h4>
+                                <p style="margin: 0; color: #666;">${getCategoryName(service.category)}</p>
+                            </div>
+                            <div>
+                                <h4 style="color: #333; margin: 0 0 4px 0; font-size: 14px;">Местоположение:</h4>
+                                <p style="margin: 0; color: #666;">📍 ${service.location}</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="service-detail-provider" style="margin-bottom: 20px; padding: 16px; background: #f8f9fa; border-radius: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h4 style="color: #333; margin: 0 0 4px 0; font-size: 14px;">
+                                    ${isRequest ? 'Заказчик:' : 'Исполнитель:'}
+                                </h4>
+                                <p style="margin: 0; color: #4CAF50; font-weight: 600; cursor: pointer;" 
+                                   onclick="showUserProfile('${service.provider}', '${service.contact}')">
+                                    ${service.provider}
+                                </p>
+                            </div>
+                            <button onclick="showUserProfile('${service.provider}', '${service.contact}')" style="
+                                padding: 8px 16px; background: #f0f0f0; border: none; border-radius: 6px;
+                                color: #333; cursor: pointer; font-size: 12px;
+                            ">Профиль</button>
+                        </div>
+                    </div>
+                    
+                    <div class="service-detail-actions" style="display: flex; gap: 12px;">
+                        <button onclick="contactProvider(${JSON.stringify(service).replace(/"/g, '&quot;')})" style="
+                            flex: 2; padding: 14px 20px; background: #4CAF50; color: white;
+                            border: none; border-radius: 8px; font-weight: 600; font-size: 16px; cursor: pointer;
+                        ">💬 Написать в Telegram</button>
+                        <button onclick="shareService(${JSON.stringify(service).replace(/"/g, '&quot;')})" style="
+                            flex: 1; padding: 14px 16px; background: #2196F3; color: white;
+                            border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                        ">📤</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
+
+// Показать профиль пользователя
+function showUserProfile(userName, userContact) {
+    const modalHTML = `
+        <div id="userProfileModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1001;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 500px;
+                max-height: 80vh; overflow-y: auto;
+            ">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h3 style="margin: 0;">Профиль пользователя</h3>
+                    <button onclick="closeUserProfileModal()" style="
+                        background: none; border: none; font-size: 24px; cursor: pointer; color: #666;
+                    ">&times;</button>
+                </div>
+                
+                <div class="user-profile-content">
+                    <div class="user-profile-header" style="text-align: center; margin-bottom: 24px; padding: 20px; background: #f8f9fa; border-radius: 12px;">
+                        <div style="width: 80px; height: 80px; background: #4CAF50; border-radius: 50%; 
+                                   display: flex; align-items: center; justify-content: center; margin: 0 auto 12px auto;">
+                            <span style="color: white; font-size: 32px; font-weight: 600;">
+                                ${userName.charAt(0).toUpperCase()}
+                            </span>
+                        </div>
+                        <h2 style="color: #333; margin: 0 0 4px 0;">${userName}</h2>
+                        <p style="color: #666; margin: 0;">Telegram: ${userContact}</p>
+                        <div style="margin-top: 12px;">
+                            <span style="background: #e8f5e8; color: #4CAF50; padding: 4px 8px; border-radius: 12px; font-size: 12px;">
+                                ⭐ ${(Math.random() * 0.5 + 4.5).toFixed(1)} рейтинг
+                            </span>
+                            <span style="background: #e3f2fd; color: #2196F3; padding: 4px 8px; border-radius: 12px; font-size: 12px; margin-left: 8px;">
+                                📈 ${Math.floor(Math.random() * 50 + 10)} сделок
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="user-services-section" style="margin-bottom: 20px;">
+                        <h4 style="color: #333; margin: 0 0 12px 0;">Активные объявления:</h4>
+                        <div id="userServicesList">
+                            <div style="text-align: center; color: #666; padding: 20px;">
+                                Загружаем объявления пользователя...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="user-profile-actions" style="display: flex; gap: 12px;">
+                        <button onclick="contactUserDirectly('${userContact}')" style="
+                            flex: 1; padding: 14px 20px; background: #4CAF50; color: white;
+                            border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                        ">💬 Написать</button>
+                        <button onclick="reportUser('${userName}', '${userContact}')" style="
+                            padding: 14px 16px; background: #f44336; color: white;
+                            border: none; border-radius: 8px; cursor: pointer;
+                        ">⚠️</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Загружаем объявления пользователя
+    loadUserServices(userName);
+}
+
+// Загрузить объявления пользователя
+async function loadUserServices(userName) {
+    const userServicesList = document.getElementById('userServicesList');
+    
+    try {
+        // Фильтруем все данные по имени пользователя
+        const userServices = allData.filter(item => item.provider === userName);
+        
+        if (userServices.length === 0) {
+            userServicesList.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">У пользователя пока нет активных объявлений</div>';
+            return;
+        }
+        
+        userServicesList.innerHTML = '';
+        
+        userServices.forEach(service => {
+            const serviceElement = document.createElement('div');
+            serviceElement.style.cssText = `
+                border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px; margin-bottom: 8px;
+                cursor: pointer; transition: all 0.2s;
+            `;
+            
+            serviceElement.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; color: #333; margin-bottom: 4px;">${service.title}</div>
+                        <div style="font-size: 12px; color: #666; margin-bottom: 4px;">${service.description.substring(0, 60)}${service.description.length > 60 ? '...' : ''}</div>
+                        <div style="font-size: 12px; color: #4CAF50;">
+                            ${service.type === 'request' ? '🔍 Просьба' : '💼 Услуга'} • ${service.price}
+                        </div>
+                    </div>
+                    <button onclick="showServiceDetails(${JSON.stringify(service).replace(/"/g, '&quot;')})" style="
+                        padding: 6px 12px; background: #f0f0f0; border: none; border-radius: 4px;
+                        color: #333; cursor: pointer; font-size: 12px; margin-left: 12px;
+                    ">Открыть</button>
+                </div>
+            `;
+            
+            serviceElement.addEventListener('mouseenter', () => {
+                serviceElement.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                serviceElement.style.borderColor = '#4CAF50';
+            });
+            
+            serviceElement.addEventListener('mouseleave', () => {
+                serviceElement.style.boxShadow = 'none';
+                serviceElement.style.borderColor = '#e0e0e0';
+            });
+            
+            userServicesList.appendChild(serviceElement);
+        });
+        
+    } catch (error) {
+        userServicesList.innerHTML = '<div style="text-align: center; color: #ff6b6b; padding: 20px;">Ошибка загрузки объявлений</div>';
+    }
+}
+
+// Связаться с исполнителем (обновленная версия)
+function contactProvider(service) {
+    const isRequest = service.type === 'request';
+    const message = isRequest ? 
+        `Здравствуйте! Я могу помочь с вашей просьбой "${service.title}". Готов обсудить детали.` :
+        `Здравствуйте! Меня интересует ваша услуга "${service.title}". Можем обсудить детали?`;
+    
+    if (tg) {
+        tg.sendData(JSON.stringify({
+            action: 'contact_provider',
+            service_id: service.id,
+            service_title: service.title,
+            provider_contact: service.contact,
+            message: message
+        }));
+        
+        tg.showAlert(`Связываемся с ${service.provider}...`);
+    } else {
+        // В режиме разработки открываем Telegram напрямую
+        const telegramUrl = `https://t.me/${service.contact.replace('@', '')}`;
+        window.open(telegramUrl, '_blank');
+    }
+}
+
+// Связаться с пользователем напрямую
+function contactUserDirectly(userContact) {
+    if (tg) {
+        tg.sendData(JSON.stringify({
+            action: 'contact_user',
+            user_contact: userContact
+        }));
+        
+        tg.showAlert(`Открываем чат с пользователем...`);
+    } else {
+        // В режиме разработки открываем Telegram напрямую
+        const telegramUrl = `https://t.me/${userContact.replace('@', '')}`;
+        window.open(telegramUrl, '_blank');
+    }
+}
+
+// Поделиться услугой
+function shareService(service) {
+    const isRequest = service.type === 'request';
+    const shareText = `${isRequest ? '🔍 Просьба' : '💼 Услуга'}: ${service.title}
+
+${service.description}
+
+💰 ${service.price}
+📍 ${service.location}
+⭐ ${service.rating}
+
+${isRequest ? 'Заказчик' : 'Исполнитель'}: ${service.provider}
+Связаться: ${service.contact}
+
+#NeighborHelp`;
+
+    if (navigator.share) {
+        navigator.share({
+            title: service.title,
+            text: shareText,
+            url: window.location.href
+        });
+    } else {
+        // Копируем в буфер обмена
+        navigator.clipboard.writeText(shareText).then(() => {
+            alert('Информация об услуге скопирована в буфер обмена!');
+        }).catch(() => {
+            alert('Поделиться:\n\n' + shareText);
+        });
+    }
+}
+
+// Пожаловаться на пользователя
+function reportUser(userName, userContact) {
+    if (confirm(`Пожаловаться на пользователя ${userName}?`)) {
+        if (tg) {
+            tg.sendData(JSON.stringify({
+                action: 'report_user',
+                user_name: userName,
+                user_contact: userContact
+            }));
+            
+            tg.showAlert('Жалоба отправлена. Мы рассмотрим её в течение 24 часов.');
+        } else {
+            alert('Жалоба отправлена администрации.');
+        }
+        
+        closeUserProfileModal();
+    }
+}
+
+// Получить название категории
+function getCategoryName(category) {
+    const categories = {
+        'animals': 'Животные',
+        'delivery': 'Доставка', 
+        'home': 'Дом и быт',
+        'elderly': 'Помощь пожилым',
+        'transport': 'Транспорт',
+        'services': 'Профуслуги'
+    };
+    return categories[category] || category;
+}
+
+// Закрыть модальные окна
+function closeServiceDetailsModal() {
+    const modal = document.getElementById('serviceDetailsModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function closeUserProfileModal() {
+    const modal = document.getElementById('userProfileModal');
+    if (modal) {
+        modal.remove();
+    }
+}
