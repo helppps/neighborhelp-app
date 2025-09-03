@@ -10,6 +10,36 @@ const GOOGLE_SHEETS_CONFIG = {
     sheetName: 'Services' // Используем только один лист
 };
 
+// Система управления модальными окнами
+let modalStack = [];
+
+function openModal(modalId, modalHTML) {
+    // Закрываем все существующие модальные окна
+    closeAllModals();
+    
+    // Добавляем новое модальное окно
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    modalStack.push(modalId);
+}
+
+function closeAllModals() {
+    // Закрываем все модальные окна
+    const modals = document.querySelectorAll('[id$="Modal"]');
+    modals.forEach(modal => modal.remove());
+    modalStack = [];
+}
+
+function closeTopModal() {
+    if (modalStack.length > 0) {
+        const topModalId = modalStack.pop();
+        const modal = document.getElementById(topModalId);
+        if (modal) {
+            modal.remove();
+        }
+    }
+}
+
+
 // Текущий режим просмотра
 let currentView = 'services';
 
@@ -447,19 +477,34 @@ function updateServicesWithDistance() {
 }
 
 function contactProvider(service) {
-    const message = `Здравствуйте! Меня интересует услуга "${service.title}". Можем обсудить детали?`;
+    const isRequest = service.type === 'request';
+    const message = isRequest ? 
+        `Здравствуйте! Я могу помочь с вашей просьбой "${service.title}". Готов обсудить детали.` :
+        `Здравствуйте! Меня интересует ваша услуга "${service.title}". Можем обсудить детали?`;
+    
+    // Извлекаем username без @
+    const username = service.contact.replace('@', '');
+    const telegramUrl = `https://t.me/${username}`;
     
     if (tg) {
+        // Отправляем данные в родительский бот
         tg.sendData(JSON.stringify({
             action: 'contact_provider',
             service_id: service.id,
+            service_title: service.title,
             provider_contact: service.contact,
-            message: message
+            message: message,
+            telegram_url: telegramUrl
         }));
         
-        tg.showAlert(`Связываемся с ${service.provider}...`);
+        // Открываем Telegram напрямую
+        window.open(telegramUrl, '_blank');
+        
+        tg.showAlert(`Переходим к диалогу с ${service.provider}`);
     } else {
-        alert(`Связаться с ${service.provider}\nКонтакт: ${service.contact}\n\n${message}`);
+        // В режиме разработки просто открываем Telegram
+        window.open(telegramUrl, '_blank');
+        alert(`Открываем диалог с ${service.provider}`);
     }
 }
 
@@ -672,7 +717,7 @@ function showServiceDetails(service) {
         </div>
     `;
     
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    openModal('serviceDetailsModal', modalHTML);
 }
 
 // Показать профиль пользователя
@@ -738,9 +783,7 @@ function showUserProfile(userName, userContact) {
         </div>
     `;
     
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-    
-    // Загружаем объявления пользователя
+    openModal('userProfileModal', modalHTML);
     loadUserServices(userName);
 }
 
@@ -749,7 +792,6 @@ async function loadUserServices(userName) {
     const userServicesList = document.getElementById('userServicesList');
     
     try {
-        // Фильтруем все данные по имени пользователя
         const userServices = allData.filter(item => item.provider === userName);
         
         if (userServices.length === 0) {
@@ -775,7 +817,7 @@ async function loadUserServices(userName) {
                             ${service.type === 'request' ? '🔍 Просьба' : '💼 Услуга'} • ${service.price}
                         </div>
                     </div>
-                    <button onclick="showServiceDetails(${JSON.stringify(service).replace(/"/g, '&quot;')})" style="
+                    <button onclick="openServiceFromProfile(${JSON.stringify(service).replace(/"/g, '&quot;')})" style="
                         padding: 6px 12px; background: #f0f0f0; border: none; border-radius: 4px;
                         color: #333; cursor: pointer; font-size: 12px; margin-left: 12px;
                     ">Открыть</button>
@@ -824,19 +866,22 @@ function contactProvider(service) {
     }
 }
 
-// Связаться с пользователем напрямую
 function contactUserDirectly(userContact) {
+    const username = userContact.replace('@', '');
+    const telegramUrl = `https://t.me/${username}`;
+    
     if (tg) {
         tg.sendData(JSON.stringify({
             action: 'contact_user',
-            user_contact: userContact
+            user_contact: userContact,
+            telegram_url: telegramUrl
         }));
         
-        tg.showAlert(`Открываем чат с пользователем...`);
-    } else {
-        // В режиме разработки открываем Telegram напрямую
-        const telegramUrl = `https://t.me/${userContact.replace('@', '')}`;
         window.open(telegramUrl, '_blank');
+        tg.showAlert(`Переходим к диалогу с пользователем`);
+    } else {
+        window.open(telegramUrl, '_blank');
+        alert(`Открываем диалог с пользователем`);
     }
 }
 
@@ -904,17 +949,16 @@ function getCategoryName(category) {
     return categories[category] || category;
 }
 
-// Закрыть модальные окна
+function openServiceFromProfile(service) {
+    // Закрываем профиль и открываем детали услуги
+    closeUserProfileModal();
+    showServiceDetails(service);
+}
+
 function closeServiceDetailsModal() {
-    const modal = document.getElementById('serviceDetailsModal');
-    if (modal) {
-        modal.remove();
-    }
+    closeAllModals();
 }
 
 function closeUserProfileModal() {
-    const modal = document.getElementById('userProfileModal');
-    if (modal) {
-        modal.remove();
-    }
+    closeAllModals();
 }
