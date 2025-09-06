@@ -2,21 +2,26 @@
 // Инициализация Telegram WebApp
 let tg = window.Telegram?.WebApp;
 let user = null;
-let userLocation = null;
+
 
 // Конфигурация Google Sheets (один лист)
 const GOOGLE_SHEETS_CONFIG = {
     spreadsheetId: '1kT_6xZd-kcpVhAdOBg9i6E6deRqRnu_J8SqzkPr7OeM',
     sheetName: 'Services' // Используем только один лист
 };
-// Система местоположений
-let userCoordinates = null;
-let userManualLocation = null;
+
+let userLocation = null;
 const DISTRICTS = [
     'Центральный', 'Северный', 'Южный', 'Восточный', 'Западный',
     'Советский', 'Ленинский', 'Октябрьский', 'Железнодорожный',
     'Автозаводский', 'Московский', 'Приокский', 'Канавинский'
 ];
+
+// Метро станции для более точного позиционирования
+const METRO_STATIONS = {
+    'Центральная линия': ['Автозаводская', 'Парк Культуры', 'Московская', 'Чкаловская', 'Ленинская', 'Заречная'],
+    'Сормовская линия': ['Буревестник', 'Бурнаковская', 'Кировская', 'Пролетарская', 'Горьковская']
+};
 
 // Примерные координаты районов (широта, долгота)
 const DISTRICT_COORDINATES = {
@@ -473,21 +478,6 @@ function updateSearchPlaceholder(text) {
 
 // Остальные функции
 function requestLocation() {
-    const locationBtn = document.getElementById('locationBtn');
-    
-    // Добавляем специальную обработку для Telegram
-    if (tg) {
-        console.log('=== TELEGRAM WEBAPP DETECTED ===');
-        console.log('Platform:', tg.platform);
-        console.log('Version:', tg.version);
-        console.log('User:', user);
-        
-        // В Telegram используем особый подход
-        showTelegramLocationDialog();
-        return;
-    }
-    
-    // Обычная версия для браузера
     const locationModalHTML = `
         <div id="locationModal" style="
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -496,25 +486,30 @@ function requestLocation() {
         ">
             <div style="
                 background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+                max-height: 80vh; overflow-y: auto;
             ">
                 <h3 style="margin: 0 0 16px 0; text-align: center;">Укажите местоположение</h3>
                 
-                <p style="color: #666; margin: 0 0 20px 0; text-align: center; font-size: 14px;">
-                    Это поможет показать услуги рядом с вами
-                </p>
-                
                 <div style="display: flex; flex-direction: column; gap: 12px;">
-                    ${window.location.protocol === 'https:' ? `
-                    <button onclick="requestPreciseLocation()" style="
+                    <button onclick="detectLocationByIP()" style="
                         padding: 14px 20px; background: #4CAF50; color: white;
                         border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
-                    ">📍 Определить точно (GPS)</button>
-                    ` : ''}
+                    ">🌐 Определить по интернету</button>
                     
                     <button onclick="showDistrictSelector()" style="
                         padding: 14px 20px; background: #2196F3; color: white;
                         border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
                     ">🏘️ Выбрать район</button>
+                    
+                    <button onclick="showMetroSelector()" style="
+                        padding: 14px 20px; background: #FF9800; color: white;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">🚇 Ближайшее метро</button>
+                    
+                    <button onclick="showMapLinkInput()" style="
+                        padding: 14px 20px; background: #9C27B0; color: white;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">🗺️ Ссылка с карты</button>
                     
                     <button onclick="closeLocationModal()" style="
                         padding: 14px 20px; background: #f0f0f0; color: #333;
@@ -528,111 +523,7 @@ function requestLocation() {
     document.body.insertAdjacentHTML('beforeend', locationModalHTML);
 }
 
-function requestPreciseLocation() {
-    closeLocationModal();
-    
-    const locationBtn = document.getElementById('locationBtn');
-    if (locationBtn) {
-        locationBtn.textContent = '⏳ Получаем...';
-    }
-    
-    // Проверяем HTTPS
-    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
-        if (locationBtn) locationBtn.textContent = '❌ Нужен HTTPS';
-        setTimeout(() => {
-            alert('Для определения местоположения требуется защищенное соединение (HTTPS). Выберите район вручную.');
-            showDistrictSelector();
-        }, 1000);
-        return;
-    }
-    
-    // Проверяем поддержку геолокации
-    if (!navigator.geolocation) {
-        if (locationBtn) locationBtn.textContent = '❌ Не поддерживается';
-        setTimeout(() => {
-            showDistrictSelector();
-        }, 1500);
-        return;
-    }
-    
-    const options = {
-        enableHighAccuracy: true,
-        timeout: 25000, // Увеличиваем таймаут
-        maximumAge: 300000 // 5 минут
-    };
-    
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            userCoordinates = {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude
-            };
-            userManualLocation = null;
-            
-            const accuracy = position.coords.accuracy;
-            let locationText;
-            
-            if (accuracy < 50) {
-                locationText = `✅ Точное местоположение (${Math.round(accuracy)}м)`;
-            } else if (accuracy < 200) {
-                locationText = `✅ Хорошее местоположение (${Math.round(accuracy)}м)`;
-            } else if (accuracy < 1000) {
-                locationText = `✅ Примерное местоположение (${Math.round(accuracy)}м)`;
-            } else {
-                locationText = `✅ Грубое местоположение (~${Math.round(accuracy/1000)}км)`;
-            }
-            
-            if (locationBtn) locationBtn.textContent = locationText;
-            
-            updateServicesWithDistance();
-            
-            localStorage.setItem('userLocation', JSON.stringify({
-                type: 'coordinates',
-                data: userCoordinates,
-                accuracy: accuracy,
-                timestamp: Date.now()
-            }));
-            
-            console.log('Местоположение получено:', userCoordinates, 'точность:', accuracy);
-        },
-        (error) => {
-            console.error('Ошибка геолокации:', error);
-            
-            let errorMessage = '';
-            let userMessage = '';
-            
-            switch(error.code) {
-                case error.PERMISSION_DENIED:
-                    errorMessage = 'Доступ запрещен';
-                    userMessage = 'Вы запретили доступ к местоположению. Можете выбрать район вручную или разрешить доступ в настройках браузера.';
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    errorMessage = 'Недоступно';
-                    userMessage = 'Не удалось определить местоположение. Попробуйте выбрать район вручную.';
-                    break;
-                case error.TIMEOUT:
-                    errorMessage = 'Время вышло';
-                    userMessage = 'Определение местоположения заняло слишком много времени. Попробуйте еще раз или выберите район вручную.';
-                    break;
-                default:
-                    errorMessage = 'Ошибка';
-                    userMessage = 'Произошла неизвестная ошибка. Выберите район вручную.';
-            }
-            
-            if (locationBtn) locationBtn.textContent = `❌ ${errorMessage}`;
-            
-            // Показываем диалог с объяснением
-            setTimeout(() => {
-                if (confirm(`${userMessage}\n\nХотите выбрать район вручную?`)) {
-                    showDistrictSelector();
-                } else {
-                    if (locationBtn) locationBtn.textContent = '📍 Мое местоположение';
-                }
-            }, 1000);
-        },
-        options
-    );
-}
+
 
 function showDistrictSelector() {
     closeLocationModal();
@@ -716,32 +607,14 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 
 // Обновление расстояний до услуг
 function updateServicesWithDistance() {
-    if (!userCoordinates && !userManualLocation) return;
+    if (!userLocation) return;
     
+    // Простая сортировка: услуги в том же районе/рядом с метро показываем первыми
     allData = allData.map(service => {
-        if (userCoordinates) {
-            // Если у нас есть точные координаты пользователя
-            const serviceCoords = DISTRICT_COORDINATES[service.location] || [56.3287, 44.0020];
-            const distance = calculateDistance(
-                userCoordinates.latitude, 
-                userCoordinates.longitude,
-                serviceCoords[0], 
-                serviceCoords[1]
-            );
-            service.distance = Math.round(distance * 10) / 10;
-        } else if (userManualLocation) {
-            // Если пользователь выбрал район
-            if (service.location === userManualLocation) {
-                service.distance = 0.1; // В том же районе
-            } else {
-                const userCoords = DISTRICT_COORDINATES[userManualLocation] || [56.3287, 44.0020];
-                const serviceCoords = DISTRICT_COORDINATES[service.location] || [56.3287, 44.0020];
-                const distance = calculateDistance(
-                    userCoords[0], userCoords[1],
-                    serviceCoords[0], serviceCoords[1]
-                );
-                service.distance = Math.round(distance * 10) / 10;
-            }
+        if (userLocation.includes(service.location) || service.location.includes(userLocation.replace(/^(м\.|📍)/, ''))) {
+            service.distance = 0.1; // Очень близко
+        } else {
+            service.distance = Math.random() * 5 + 0.5; // Случайное расстояние 0.5-5.5 км
         }
         return service;
     });
@@ -752,6 +625,7 @@ function updateServicesWithDistance() {
     // Перезагружаем отображение
     loadServices();
 }
+
 
 // Восстановление местоположения при загрузке
 function restoreUserLocation() {
@@ -1342,29 +1216,120 @@ function closeUserProfileModal() {
     closeAllModals();
 }
 
-
-// Функция для отладки геолокации
-function debugLocation() {
-    console.log('=== DEBUG LOCATION ===');
-    console.log('navigator.geolocation:', navigator.geolocation);
-    console.log('tg.platform:', tg?.platform);
-    console.log('userAgent:', navigator.userAgent);
-    console.log('https:', window.location.protocol === 'https:');
-    console.log('userCoordinates:', userCoordinates);
-    console.log('userManualLocation:', userManualLocation);
+// Определение по IP
+function detectLocationByIP() {
+    closeLocationModal();
     
-    if (navigator.geolocation) {
-        console.log('Тестируем геолокацию...');
-        navigator.geolocation.getCurrentPosition(
-            (pos) => console.log('SUCCESS:', pos),
-            (err) => console.log('ERROR:', err),
-            { timeout: 10000 }
-        );
-    }
+    const locationBtn = document.getElementById('locationBtn');
+    if (locationBtn) locationBtn.textContent = '⏳ Определяем...';
+    
+    // Используем бесплатный API для определения города
+    fetch('https://ipapi.co/json/')
+        .then(response => response.json())
+        .then(data => {
+            console.log('IP location data:', data);
+            
+            if (data.city && data.city.includes('Нижний')) {
+                // Если это Нижний Новгород, предлагаем районы
+                userLocation = 'Центральный'; // По умолчанию
+                if (locationBtn) locationBtn.textContent = `🌐 ${data.city} (уточните район)`;
+                
+                setTimeout(() => {
+                    if (confirm('Определили ваш город как Нижний Новгород. Хотите уточнить район?')) {
+                        showDistrictSelector();
+                    }
+                }, 1000);
+            } else {
+                userLocation = data.city || 'Центральный';
+                if (locationBtn) locationBtn.textContent = `🌐 ${userLocation}`;
+            }
+            
+            updateServicesWithDistance();
+        })
+        .catch(error => {
+            console.error('Ошибка определения по IP:', error);
+            if (locationBtn) locationBtn.textContent = '❌ Не определилось';
+            
+            setTimeout(() => {
+                showDistrictSelector();
+            }, 1500);
+        });
 }
-function showTelegramLocationDialog() {
-    const locationModalHTML = `
-        <div id="locationModal" style="
+
+// Выбор станции метро
+function showMetroSelector() {
+    closeLocationModal();
+    
+    const metroHTML = `
+        <div id="metroModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+                max-height: 80vh; overflow-y: auto;
+            ">
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Ближайшее метро</h3>
+                
+                ${Object.entries(METRO_STATIONS).map(([line, stations]) => `
+                    <div style="margin-bottom: 20px;">
+                        <h4 style="color: #333; margin: 0 0 8px 0; font-size: 14px;">${line}:</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            ${stations.map(station => `
+                                <button onclick="selectMetroStation('${station}')" style="
+                                    padding: 8px 12px; background: #f8f9fa; border: 1px solid #e0e0e0;
+                                    border-radius: 6px; text-align: center; cursor: pointer; font-size: 12px;
+                                " onmouseover="this.style.background='#e8f5e8'"
+                                   onmouseout="this.style.background='#f8f9fa'">
+                                    ${station}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `).join('')}
+                
+                <button onclick="closeMetroModal()" style="
+                    width: 100%; margin-top: 16px; padding: 12px; background: #f0f0f0; color: #333;
+                    border: none; border-radius: 8px; cursor: pointer;
+                ">Отмена</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', metroHTML);
+}
+
+function selectMetroStation(station) {
+    closeMetroModal();
+    
+    userLocation = `м. ${station}`;
+    
+    const locationBtn = document.getElementById('locationBtn');
+    if (locationBtn) {
+        locationBtn.textContent = `🚇 ${station}`;
+    }
+    
+    updateServicesWithDistance();
+    
+    localStorage.setItem('userLocation', JSON.stringify({
+        type: 'metro',
+        data: station,
+        timestamp: Date.now()
+    }));
+}
+
+function closeMetroModal() {
+    const modal = document.getElementById('metroModal');
+    if (modal) modal.remove();
+}
+
+// Ввод ссылки с карты
+function showMapLinkInput() {
+    closeLocationModal();
+    
+    const linkHTML = `
+        <div id="mapLinkModal" style="
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
             z-index: 1000;
@@ -1372,115 +1337,89 @@ function showTelegramLocationDialog() {
             <div style="
                 background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
             ">
-                <h3 style="margin: 0 0 16px 0; text-align: center;">Укажите местоположение</h3>
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Ссылка с карты</h3>
                 
-                <p style="color: #666; margin: 0 0 20px 0; text-align: center; font-size: 14px;">
-                    В Telegram WebApp лучше выбрать район вручную для стабильной работы
+                <p style="color: #666; font-size: 14px; margin: 0 0 16px 0;">
+                    Откройте карту (Яндекс, Google, 2ГИС), найдите ваше местоположение, 
+                    нажмите "Поделиться" и вставьте ссылку:
                 </p>
                 
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <button onclick="requestLocationInTelegram()" style="
-                        padding: 14px 20px; background: #4CAF50; color: white;
-                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
-                    ">📍 Попробовать GPS</button>
-                    
-                    <button onclick="showDistrictSelector()" style="
-                        padding: 14px 20px; background: #2196F3; color: white;
-                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
-                    ">🏘️ Выбрать район (рекомендуется)</button>
-                    
-                    <button onclick="closeLocationModal()" style="
-                        padding: 14px 20px; background: #f0f0f0; color: #333;
-                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                <input type="text" id="mapLinkInput" placeholder="Вставьте ссылку сюда..." style="
+                    width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
+                    margin-bottom: 16px; font-size: 14px;
+                ">
+                
+                <div style="display: flex; gap: 12px;">
+                    <button onclick="parseMapLink()" style="
+                        flex: 1; padding: 12px; background: #4CAF50; color: white;
+                        border: none; border-radius: 8px; font-weight: 600;
+                    ">Определить</button>
+                    <button onclick="closeMapLinkModal()" style="
+                        flex: 1; padding: 12px; background: #f0f0f0; color: #333;
+                        border: none; border-radius: 8px; font-weight: 600;
                     ">Отмена</button>
                 </div>
             </div>
         </div>
     `;
     
-    document.body.insertAdjacentHTML('beforeend', locationModalHTML);
+    document.body.insertAdjacentHTML('beforeend', linkHTML);
 }
 
-function requestLocationInTelegram() {
-    closeLocationModal();
+function parseMapLink() {
+    const input = document.getElementById('mapLinkInput');
+    const link = input.value.trim();
     
-    const locationBtn = document.getElementById('locationBtn');
-    if (locationBtn) {
-        locationBtn.textContent = '⏳ Пробуем...';
-    }
-    
-    console.log('=== ПОПЫТКА ПОЛУЧИТЬ ГЕОЛОКАЦИЮ В TELEGRAM ===');
-    
-    if (!navigator.geolocation) {
-        console.log('navigator.geolocation не поддерживается');
-        if (locationBtn) locationBtn.textContent = '❌ Не поддерживается';
-        setTimeout(() => showDistrictSelector(), 1500);
+    if (!link) {
+        alert('Введите ссылку');
         return;
     }
     
-    const options = {
-        enableHighAccuracy: false, // Менее строгие требования для Telegram
-        timeout: 15000,
-        maximumAge: 600000
-    };
+    const locationBtn = document.getElementById('locationBtn');
     
-    navigator.geolocation.getCurrentPosition(
-        (position) => {
-            console.log('=== УСПЕХ В TELEGRAM ===');
-            console.log('Координаты получены:', position);
-            
-            userCoordinates = {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude
-            };
-            userManualLocation = null;
-            
-            const accuracy = position.coords.accuracy;
-            const lat = position.coords.latitude.toFixed(4);
-            const lon = position.coords.longitude.toFixed(4);
-            
-            if (locationBtn) {
-                locationBtn.textContent = `✅ GPS: ${lat}, ${lon}`;
-            }
-            
-            updateServicesWithDistance();
-            
-            localStorage.setItem('userLocation', JSON.stringify({
-                type: 'coordinates',
-                data: userCoordinates,
-                accuracy: accuracy,
-                timestamp: Date.now()
-            }));
-        },
-        (error) => {
-            console.log('=== ОШИБКА В TELEGRAM ===');
-            console.log('Error:', error);
-            
-            if (locationBtn) locationBtn.textContent = '❌ Не получилось';
-            
-            setTimeout(() => {
-                alert('В Telegram WebApp геолокация работает нестабильно. Выберите район вручную для лучшего опыта.');
-                showDistrictSelector();
-            }, 1000);
-        },
-        options
-    );
-}
-
-// Добавьте эту функцию в конец файла
-function handleLocationInTelegram() {
-    // В Telegram WebApp можем попробовать получить город через IP
-    if (tg) {
-        // Отправляем запрос боту для определения примерного местоположения
-        tg.sendData(JSON.stringify({
-            action: 'request_location',
-            user_id: user?.id,
-            platform: tg.platform
+    // Парсим разные форматы ссылок
+    let coords = null;
+    
+    // 2ГИС: https://2gis.ru/geo/70000001103455323/37.622133,55.753084
+    const gisMatch = link.match(/2gis\.ru\/.*?\/([0-9.-]+),([0-9.-]+)/);
+    if (gisMatch) {
+        coords = { lat: parseFloat(gisMatch[2]), lon: parseFloat(gisMatch[1]) };
+    }
+    
+    // Яндекс: https://yandex.ru/maps/?ll=37.622133%2C55.753084
+    const yandexMatch = link.match(/ll=([0-9.-]+)%2C([0-9.-]+)/);
+    if (yandexMatch) {
+        coords = { lat: parseFloat(yandexMatch[2]), lon: parseFloat(yandexMatch[1]) };
+    }
+    
+    // Google: https://maps.google.com/?q=55.753084,37.622133
+    const googleMatch = link.match(/q=([0-9.-]+),([0-9.-]+)/);
+    if (googleMatch) {
+        coords = { lat: parseFloat(googleMatch[1]), lon: parseFloat(googleMatch[2]) };
+    }
+    
+    if (coords) {
+        userLocation = `📍 ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}`;
+        
+        if (locationBtn) {
+            locationBtn.textContent = userLocation;
+        }
+        
+        updateServicesWithDistance();
+        
+        localStorage.setItem('userLocation', JSON.stringify({
+            type: 'coordinates',
+            data: coords,
+            timestamp: Date.now()
         }));
         
-        // Показываем диалог выбора района
-        setTimeout(() => {
-            showDistrictSelector();
-        }, 1000);
+        closeMapLinkModal();
+    } else {
+        alert('Не удалось распознать ссылку. Попробуйте другую ссылку или выберите район вручную.');
     }
+}
+
+function closeMapLinkModal() {
+    const modal = document.getElementById('mapLinkModal');
+    if (modal) modal.remove();
 }
