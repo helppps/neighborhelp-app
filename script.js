@@ -1487,7 +1487,7 @@ function selectCity(city) {
     closeCityModal();
     
     const cityData = RUSSIA_CITIES[city];
-    if (cityData && cityData.districts.length > 0) {
+    if (cityData && cityData.districts && Object.keys(cityData.districts).length > 0) {
         // Показываем выбор района для известного города
         showLocationOptionsForCity(city, cityData);
     } else {
