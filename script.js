@@ -219,6 +219,9 @@ function initTelegramApp() {
         tg.MainButton.text = "Связаться";
         tg.MainButton.show();
         
+        // Настройка для геолокации
+        tg.enableClosingConfirmation();
+        
         console.log('Telegram WebApp инициализирован');
         console.log('Пользователь:', user);
     } else {
@@ -229,8 +232,9 @@ function initTelegramApp() {
             username: "test_user"
         };
     }
+    
     setTimeout(() => {
-    restoreUserLocation();
+        restoreUserLocation();
     }, 1000);
 }
 
@@ -510,48 +514,76 @@ function requestPreciseLocation() {
         locationBtn.textContent = '⏳ Получаем...';
     }
     
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
+    // Сначала пробуем Telegram WebApp API
+    if (tg && tg.LocationManager) {
+        tg.LocationManager.getLocation((location) => {
+            if (location) {
                 userCoordinates = {
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude
+                    latitude: location.latitude,
+                    longitude: location.longitude
                 };
                 userManualLocation = null;
                 
                 if (locationBtn) locationBtn.textContent = '✅ Местоположение получено';
                 updateServicesWithDistance();
                 
-                // Сохраняем в localStorage для повторного использования
                 localStorage.setItem('userLocation', JSON.stringify({
                     type: 'coordinates',
                     data: userCoordinates
                 }));
-            },
-            (error) => {
-                console.error('Ошибка получения геолокации:', error);
-                if (locationBtn) locationBtn.textContent = '❌ Не удалось получить';
-                
-                // Предлагаем выбрать район вместо GPS
-                setTimeout(() => {
-                    if (confirm('Не удалось определить точное местоположение. Хотите выбрать район вручную?')) {
-                        showDistrictSelector();
-                    } else {
-                        if (locationBtn) locationBtn.textContent = '📍 Мое местоположение';
-                    }
-                }, 1500);
-            },
-            {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 300000 // 5 минут
+            } else {
+                fallbackToWebGeolocation();
             }
-        );
+        }, (error) => {
+            console.error('Ошибка Telegram геолокации:', error);
+            fallbackToWebGeolocation();
+        });
     } else {
-        if (locationBtn) locationBtn.textContent = '❌ Не поддерживается';
-        setTimeout(() => {
-            showDistrictSelector();
-        }, 1500);
+        fallbackToWebGeolocation();
+    }
+    
+    function fallbackToWebGeolocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    userCoordinates = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude
+                    };
+                    userManualLocation = null;
+                    
+                    if (locationBtn) locationBtn.textContent = '✅ Местоположение получено';
+                    updateServicesWithDistance();
+                    
+                    localStorage.setItem('userLocation', JSON.stringify({
+                        type: 'coordinates',
+                        data: userCoordinates
+                    }));
+                },
+                (error) => {
+                    console.error('Ошибка получения геолокации:', error);
+                    if (locationBtn) locationBtn.textContent = '❌ Не удалось получить';
+                    
+                    setTimeout(() => {
+                        if (confirm('Не удалось определить точное местоположение. Хотите выбрать район вручную?')) {
+                            showDistrictSelector();
+                        } else {
+                            if (locationBtn) locationBtn.textContent = '📍 Мое местоположение';
+                        }
+                    }, 1500);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 15000,
+                    maximumAge: 300000
+                }
+            );
+        } else {
+            if (locationBtn) locationBtn.textContent = '❌ Не поддерживается';
+            setTimeout(() => {
+                showDistrictSelector();
+            }, 1500);
+        }
     }
 }
 
@@ -697,11 +729,6 @@ function restoreUserLocation() {
     }
 }
 
-
-function updateServicesWithDistance() {
-    if (!userLocation) return;
-    loadServices();
-}
 
 function contactProvider(service) {
     const isRequest = service.type === 'request';
@@ -1076,29 +1103,7 @@ async function loadUserServices(userName) {
     }
 }
 
-// Связаться с исполнителем (обновленная версия)
-function contactProvider(service) {
-    const isRequest = service.type === 'request';
-    const message = isRequest ? 
-        `Здравствуйте! Я могу помочь с вашей просьбой "${service.title}". Готов обсудить детали.` :
-        `Здравствуйте! Меня интересует ваша услуга "${service.title}". Можем обсудить детали?`;
-    
-    if (tg) {
-        tg.sendData(JSON.stringify({
-            action: 'contact_provider',
-            service_id: service.id,
-            service_title: service.title,
-            provider_contact: service.contact,
-            message: message
-        }));
-        
-        tg.showAlert(`Связываемся с ${service.provider}...`);
-    } else {
-        // В режиме разработки открываем Telegram напрямую
-        const telegramUrl = `https://t.me/${service.contact.replace('@', '')}`;
-        window.open(telegramUrl, '_blank');
-    }
-}
+
 
 function contactUserDirectly(userContact) {
     const username = userContact.replace('@', '');
