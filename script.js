@@ -371,7 +371,6 @@ function createServiceCard(service) {
             ">
                 ${service.provider}
             </div>
-            // В функции createServiceCard найдите блок service-actions и замените на:
             <div class="service-actions" style="display: flex; gap: 8px;">
                 <button class="btn-small btn-primary" onclick="showServiceDetails(${service.id})">
                     Подробнее
@@ -703,8 +702,6 @@ function showServiceDetails(serviceData) {
                             ">Профиль</button>
                         </div>
                     </div>
-                    
-                    // В функции showServiceDetails найдите и замените блок service-detail-actions:
                     <div class="service-detail-actions" style="display: flex; gap: 12px;">
                         <button onclick="contactProvider({
                             id: ${service.id},
