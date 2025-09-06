@@ -10,6 +10,11 @@ const GOOGLE_SHEETS_CONFIG = {
     sheetName: 'Services' // Используем только один лист
 };
 
+const METRO_STATIONS = {
+    'Сокольническая линия': ['Сокольники', 'Красносельская', 'Комсомольская'],
+    'Замоскворецкая линия': ['Речной вокзал', 'Водный стадион', 'Войковская']
+};
+
 let userLocation = null;
 
 
@@ -645,15 +650,11 @@ function restoreUserLocation() {
             const isExpired = locationData.timestamp && (Date.now() - locationData.timestamp > 24 * 60 * 60 * 1000);
             
             if (locationData.type === 'coordinates' && !isExpired) {
-                userCoordinates = locationData.data;
-                const accuracy = locationData.accuracy || 0;
-                const locationText = accuracy < 100 ? 
-                    `✅ Точное местоположение` : 
-                    `✅ Примерное местоположение`;
-                if (locationBtn) locationBtn.textContent = locationText;
+                userLocation = locationData.data.address || `${locationData.data.lat}, ${locationData.data.lon}`;
+                if (locationBtn) locationBtn.textContent = `📍 ${userLocation}`;
                 updateServicesWithDistance();
-            } else if (locationData.type === 'district') {
-                userManualLocation = locationData.data;
+            } else if (locationData.type === 'district' || locationData.type === 'city' || locationData.type === 'manual') {
+                userLocation = locationData.data;
                 if (locationBtn) locationBtn.textContent = `📍 ${locationData.data}`;
                 updateServicesWithDistance();
             } else if (isExpired && locationBtn) {
@@ -1490,7 +1491,7 @@ function selectFoundCity(cityName, isLocal) {
         // Для найденного через API города просто устанавливаем название
         setJustCity(cityName);
     }
-}}
+}
 
 function showLocationOptionsForCity(city, cityData) {
     const optionsHTML = `
@@ -1530,11 +1531,11 @@ function showLocationOptionsForCity(city, cityData) {
     document.body.insertAdjacentHTML('beforeend', optionsHTML);
 }
 
-function showDistrictSelectorForCity(city) {
-    closeLocationOptionsModal();
+function showDistrictSelector() {
+    closeLocationModal();
     
-    const cityData = RUSSIA_CITIES[city];
-    if (!cityData || !cityData.districts) return;
+    // Используем районы Нижнего Новгорода по умолчанию (можно изменить)
+    const districts = RUSSIA_CITIES['Нижний Новгород'].districts;
     
     const districtHTML = `
         <div id="districtModal" style="
@@ -1546,11 +1547,11 @@ function showDistrictSelectorForCity(city) {
                 background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
                 max-height: 80vh; overflow-y: auto;
             ">
-                <h3 style="margin: 0 0 16px 0; text-align: center;">Районы - ${city}</h3>
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Выберите район</h3>
                 
                 <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
-                    ${cityData.districts.map(district => `
-                        <button onclick="selectDistrictInCity('${city}', '${district}')" style="
+                    ${districts.map(district => `
+                        <button onclick="selectDistrict('${district}')" style="
                             padding: 12px 16px; background: #f8f9fa; border: 1px solid #e0e0e0;
                             border-radius: 8px; text-align: left; cursor: pointer; transition: all 0.2s;
                         " onmouseover="this.style.background='#e8f5e8'; this.style.borderColor='#4CAF50'"
@@ -1563,7 +1564,7 @@ function showDistrictSelectorForCity(city) {
                 <button onclick="closeDistrictModal()" style="
                     width: 100%; margin-top: 16px; padding: 12px; background: #f0f0f0; color: #333;
                     border: none; border-radius: 8px; cursor: pointer;
-                ">Назад</button>
+                ">Отмена</button>
             </div>
         </div>
     `;
@@ -1571,21 +1572,21 @@ function showDistrictSelectorForCity(city) {
     document.body.insertAdjacentHTML('beforeend', districtHTML);
 }
 
-function selectDistrictInCity(city, district) {
+function selectDistrict(district) {
     closeDistrictModal();
     
-    userLocation = `${city}, ${district}`;
+    userLocation = district;
     
     const locationBtn = document.getElementById('locationBtn');
     if (locationBtn) {
-        locationBtn.textContent = `🏘️ ${district}, ${city}`;
+        locationBtn.textContent = `📍 ${district}`;
     }
     
     updateServicesWithDistance();
     
     localStorage.setItem('userLocation', JSON.stringify({
         type: 'district',
-        data: `${city}, ${district}`,
+        data: district,
         timestamp: Date.now()
     }));
 }
