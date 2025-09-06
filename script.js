@@ -535,45 +535,6 @@ function requestLocation() {
 }
 
 
-
-function showDistrictSelector() {
-    closeLocationModal();
-    
-    const districtHTML = `
-        <div id="districtModal" style="
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
-            z-index: 1000;
-        ">
-            <div style="
-                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
-                max-height: 80vh; overflow-y: auto;
-            ">
-                <h3 style="margin: 0 0 16px 0; text-align: center;">Выберите район</h3>
-                
-                <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
-                    ${DISTRICTS.map(district => `
-                        <button onclick="selectDistrict('${district}')" style="
-                            padding: 12px 16px; background: #f8f9fa; border: 1px solid #e0e0e0;
-                            border-radius: 8px; text-align: left; cursor: pointer; transition: all 0.2s;
-                        " onmouseover="this.style.background='#e8f5e8'; this.style.borderColor='#4CAF50'"
-                           onmouseout="this.style.background='#f8f9fa'; this.style.borderColor='#e0e0e0'">
-                            ${district}
-                        </button>
-                    `).join('')}
-                </div>
-                
-                <button onclick="closeDistrictModal()" style="
-                    width: 100%; margin-top: 16px; padding: 12px; background: #f0f0f0; color: #333;
-                    border: none; border-radius: 8px; cursor: pointer;
-                ">Отмена</button>
-            </div>
-        </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', districtHTML);
-}
-
 function selectDistrict(district) {
     closeDistrictModal();
     
@@ -1866,4 +1827,77 @@ async function searchCitiesLive(query) {
             resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #ff6b6b;">Ошибка поиска</div>';
         }
     }, 500); // Задержка 500мс
+}
+
+
+function showDistrictSelectorForCity(city) {
+    closeLocationOptionsModal();
+    
+    const cityData = RUSSIA_CITIES[city];
+    if (!cityData || !cityData.districts) {
+        alert('Для этого города районы не определены');
+        return;
+    }
+    
+    const districtHTML = `
+        <div id="districtModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+                max-height: 80vh; overflow-y: auto;
+            ">
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Районы - ${city}</h3>
+                
+                <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+                    ${cityData.districts.map(district => `
+                        <button onclick="selectDistrictInCity('${city}', '${district}')" style="
+                            padding: 12px 16px; background: #f8f9fa; border: 1px solid #e0e0e0;
+                            border-radius: 8px; text-align: left; cursor: pointer; transition: all 0.2s;
+                        " onmouseover="this.style.background='#e8f5e8'; this.style.borderColor='#4CAF50'"
+                           onmouseout="this.style.background='#f8f9fa'; this.style.borderColor='#e0e0e0'">
+                            ${district}
+                        </button>
+                    `).join('')}
+                </div>
+                
+                <button onclick="goBackToLocationOptions('${city}')" style="
+                    width: 100%; margin-top: 16px; padding: 12px; background: #f0f0f0; color: #333;
+                    border: none; border-radius: 8px; cursor: pointer;
+                ">← Назад к выбору</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', districtHTML);
+}
+
+function selectDistrictInCity(city, district) {
+    closeDistrictModal();
+    
+    userLocation = `${city}, ${district}`;
+    
+    const locationBtn = document.getElementById('locationBtn');
+    if (locationBtn) {
+        locationBtn.textContent = `🏘️ ${district}, ${city}`;
+    }
+    
+    updateServicesWithDistance();
+    
+    localStorage.setItem('userLocation', JSON.stringify({
+        type: 'district',
+        data: `${city}, ${district}`,
+        timestamp: Date.now()
+    }));
+}
+
+function goBackToLocationOptions(city) {
+    closeDistrictModal();
+    
+    const cityData = RUSSIA_CITIES[city];
+    if (cityData) {
+        showLocationOptionsForCity(city, cityData);
+    }
 }
