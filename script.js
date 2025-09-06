@@ -9,7 +9,31 @@ const GOOGLE_SHEETS_CONFIG = {
     spreadsheetId: '1kT_6xZd-kcpVhAdOBg9i6E6deRqRnu_J8SqzkPr7OeM',
     sheetName: 'Services' // Используем только один лист
 };
+// Система местоположений
+let userCoordinates = null;
+let userManualLocation = null;
+const DISTRICTS = [
+    'Центральный', 'Северный', 'Южный', 'Восточный', 'Западный',
+    'Советский', 'Ленинский', 'Октябрьский', 'Железнодорожный',
+    'Автозаводский', 'Московский', 'Приокский', 'Канавинский'
+];
 
+// Примерные координаты районов (широта, долгота)
+const DISTRICT_COORDINATES = {
+    'Центральный': [56.3287, 44.0020],
+    'Северный': [56.3500, 44.0020],
+    'Южный': [56.3000, 44.0020],
+    'Восточный': [56.3287, 44.0300],
+    'Западный': [56.3287, 43.9700],
+    'Советский': [56.3400, 43.9800],
+    'Ленинский': [56.3200, 44.0200],
+    'Октябрьский': [56.3300, 43.9900],
+    'Железнодорожный': [56.3100, 44.0100],
+    'Автозаводский': [56.2700, 43.8700],
+    'Московский': [56.3600, 43.9300],
+    'Приокский': [56.2900, 44.0700],
+    'Канавинский': [56.3400, 44.0400]
+};
 // Система управления модальными окнами
 let modalStack = [];
 
@@ -205,6 +229,9 @@ function initTelegramApp() {
             username: "test_user"
         };
     }
+    setTimeout(() => {
+    restoreUserLocation();
+    }, 1000);
 }
 
 // Обновление информации о пользователе
@@ -372,17 +399,10 @@ function createServiceCard(service) {
                 ${service.provider}
             </div>
             <div class="service-actions" style="display: flex; gap: 8px;">
-                <button class="btn-small btn-primary" onclick="showServiceDetails(${service.id})">
+                <button class="btn-small btn-primary" onclick="showServiceDetailsById(${service.id})">
                     Подробнее
                 </button>
-                <button class="btn-small btn-secondary" onclick="contactProvider({
-                    id: ${service.id},
-                    title: '${service.title.replace(/'/g, "\\'")}',
-                    description: '${service.description.replace(/'/g, "\\'")}',
-                    provider: '${service.provider.replace(/'/g, "\\'")}',
-                    contact: '${service.contact}',
-                    type: '${service.type}'
-                })">
+                <button class="btn-small btn-secondary" onclick="contactProviderById(${service.id})">
                     Связаться
                 </button>
             </div>
@@ -442,41 +462,241 @@ function updateSearchPlaceholder(text) {
 // Остальные функции
 function requestLocation() {
     const locationBtn = document.getElementById('locationBtn');
+    
+    // Показываем модальное окно выбора способа указания местоположения
+    const locationModalHTML = `
+        <div id="locationModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+            ">
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Укажите местоположение</h3>
+                
+                <p style="color: #666; margin: 0 0 20px 0; text-align: center; font-size: 14px;">
+                    Это поможет показать услуги рядом с вами
+                </p>
+                
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <button onclick="requestPreciseLocation()" style="
+                        padding: 14px 20px; background: #4CAF50; color: white;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">📍 Определить точно (GPS)</button>
+                    
+                    <button onclick="showDistrictSelector()" style="
+                        padding: 14px 20px; background: #2196F3; color: white;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">🏘️ Выбрать район</button>
+                    
+                    <button onclick="closeLocationModal()" style="
+                        padding: 14px 20px; background: #f0f0f0; color: #333;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">Отмена</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', locationModalHTML);
+}
+
+function requestPreciseLocation() {
+    closeLocationModal();
+    
+    const locationBtn = document.getElementById('locationBtn');
     if (locationBtn) {
         locationBtn.textContent = '⏳ Получаем...';
     }
     
-    if (tg && tg.LocationManager) {
-        tg.LocationManager.getLocation((location) => {
-            userLocation = location;
-            if (locationBtn) locationBtn.textContent = '✅ Местоположение получено';
-            updateServicesWithDistance();
-        });
-    } else if (navigator.geolocation) {
+    if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
-                userLocation = {
+                userCoordinates = {
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude
                 };
+                userManualLocation = null;
+                
                 if (locationBtn) locationBtn.textContent = '✅ Местоположение получено';
                 updateServicesWithDistance();
+                
+                // Сохраняем в localStorage для повторного использования
+                localStorage.setItem('userLocation', JSON.stringify({
+                    type: 'coordinates',
+                    data: userCoordinates
+                }));
             },
             (error) => {
                 console.error('Ошибка получения геолокации:', error);
                 if (locationBtn) locationBtn.textContent = '❌ Не удалось получить';
+                
+                // Предлагаем выбрать район вместо GPS
                 setTimeout(() => {
-                    if (locationBtn) locationBtn.textContent = '📍 Мое местоположение';
-                }, 2000);
+                    if (confirm('Не удалось определить точное местоположение. Хотите выбрать район вручную?')) {
+                        showDistrictSelector();
+                    } else {
+                        if (locationBtn) locationBtn.textContent = '📍 Мое местоположение';
+                    }
+                }, 1500);
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 300000 // 5 минут
             }
         );
     } else {
         if (locationBtn) locationBtn.textContent = '❌ Не поддерживается';
         setTimeout(() => {
-            if (locationBtn) locationBtn.textContent = '📍 Мое местоположение';
-        }, 2000);
+            showDistrictSelector();
+        }, 1500);
     }
 }
+
+function showDistrictSelector() {
+    closeLocationModal();
+    
+    const districtHTML = `
+        <div id="districtModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+                max-height: 80vh; overflow-y: auto;
+            ">
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Выберите район</h3>
+                
+                <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+                    ${DISTRICTS.map(district => `
+                        <button onclick="selectDistrict('${district}')" style="
+                            padding: 12px 16px; background: #f8f9fa; border: 1px solid #e0e0e0;
+                            border-radius: 8px; text-align: left; cursor: pointer; transition: all 0.2s;
+                        " onmouseover="this.style.background='#e8f5e8'; this.style.borderColor='#4CAF50'"
+                           onmouseout="this.style.background='#f8f9fa'; this.style.borderColor='#e0e0e0'">
+                            ${district}
+                        </button>
+                    `).join('')}
+                </div>
+                
+                <button onclick="closeDistrictModal()" style="
+                    width: 100%; margin-top: 16px; padding: 12px; background: #f0f0f0; color: #333;
+                    border: none; border-radius: 8px; cursor: pointer;
+                ">Отмена</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', districtHTML);
+}
+
+function selectDistrict(district) {
+    closeDistrictModal();
+    
+    userManualLocation = district;
+    userCoordinates = null;
+    
+    const locationBtn = document.getElementById('locationBtn');
+    if (locationBtn) {
+        locationBtn.textContent = `📍 ${district}`;
+    }
+    
+    updateServicesWithDistance();
+    
+    // Сохраняем в localStorage
+    localStorage.setItem('userLocation', JSON.stringify({
+        type: 'district',
+        data: district
+    }));
+}
+
+function closeLocationModal() {
+    const modal = document.getElementById('locationModal');
+    if (modal) modal.remove();
+}
+
+function closeDistrictModal() {
+    const modal = document.getElementById('districtModal');
+    if (modal) modal.remove();
+}
+
+// Функция расчета расстояния между координатами (формула гаверсинусов)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Радиус Земли в км
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+// Обновление расстояний до услуг
+function updateServicesWithDistance() {
+    if (!userCoordinates && !userManualLocation) return;
+    
+    allData = allData.map(service => {
+        if (userCoordinates) {
+            // Если у нас есть точные координаты пользователя
+            const serviceCoords = DISTRICT_COORDINATES[service.location] || [56.3287, 44.0020];
+            const distance = calculateDistance(
+                userCoordinates.latitude, 
+                userCoordinates.longitude,
+                serviceCoords[0], 
+                serviceCoords[1]
+            );
+            service.distance = Math.round(distance * 10) / 10;
+        } else if (userManualLocation) {
+            // Если пользователь выбрал район
+            if (service.location === userManualLocation) {
+                service.distance = 0.1; // В том же районе
+            } else {
+                const userCoords = DISTRICT_COORDINATES[userManualLocation] || [56.3287, 44.0020];
+                const serviceCoords = DISTRICT_COORDINATES[service.location] || [56.3287, 44.0020];
+                const distance = calculateDistance(
+                    userCoords[0], userCoords[1],
+                    serviceCoords[0], serviceCoords[1]
+                );
+                service.distance = Math.round(distance * 10) / 10;
+            }
+        }
+        return service;
+    });
+    
+    // Сортируем по расстоянию
+    allData.sort((a, b) => a.distance - b.distance);
+    
+    // Перезагружаем отображение
+    loadServices();
+}
+
+// Восстановление местоположения при загрузке
+function restoreUserLocation() {
+    const savedLocation = localStorage.getItem('userLocation');
+    if (savedLocation) {
+        try {
+            const locationData = JSON.parse(savedLocation);
+            const locationBtn = document.getElementById('locationBtn');
+            
+            if (locationData.type === 'coordinates') {
+                userCoordinates = locationData.data;
+                if (locationBtn) locationBtn.textContent = '✅ Местоположение получено';
+            } else if (locationData.type === 'district') {
+                userManualLocation = locationData.data;
+                if (locationBtn) locationBtn.textContent = `📍 ${locationData.data}`;
+            }
+            
+            updateServicesWithDistance();
+        } catch (error) {
+            console.error('Ошибка восстановления местоположения:', error);
+        }
+    }
+}
+
 
 function updateServicesWithDistance() {
     if (!userLocation) return;
@@ -705,9 +925,9 @@ function showServiceDetails(serviceData) {
                     <div class="service-detail-actions" style="display: flex; gap: 12px;">
                         <button onclick="contactProvider({
                             id: ${service.id},
-                            title: '${service.title.replace(/'/g, "\\'")}',
-                            description: '${service.description.replace(/'/g, "\\'")}',
-                            provider: '${service.provider.replace(/'/g, "\\'")}',
+                            title: \`${service.title}\`,
+                            description: \`${service.description}\`,
+                            provider: \`${service.provider}\`,
                             contact: '${service.contact}',
                             type: '${service.type}'
                         })" style="
@@ -716,9 +936,9 @@ function showServiceDetails(serviceData) {
                         ">💬 Написать в Telegram</button>
                         <button onclick="shareService({
                             id: ${service.id},
-                            title: '${service.title.replace(/'/g, "\\'")}',
-                            description: '${service.description.replace(/'/g, "\\'")}',
-                            provider: '${service.provider.replace(/'/g, "\\'")}',
+                            title: \`${service.title}\`,
+                            description: \`${service.description}\`,
+                            provider: \`${service.provider}\`,
                             contact: '${service.contact}',
                             type: '${service.type}'
                         })" style="
@@ -1024,6 +1244,24 @@ function confirmContact(telegramUrl) {
     if (tg) {
         tg.showAlert('Переходим в Telegram...');
     }
+}
+
+function contactProviderById(serviceId) {
+    const service = allData.find(item => item.id === serviceId);
+    if (!service) {
+        alert('Услуга не найдена');
+        return;
+    }
+    contactProvider(service);
+}
+
+function showServiceDetailsById(serviceId) {
+    const service = allData.find(item => item.id === serviceId);
+    if (!service) {
+        alert('Услуга не найдена');
+        return;
+    }
+    showServiceDetails(service);
 }
 
 function closeContactConfirmModal() {
