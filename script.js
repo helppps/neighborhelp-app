@@ -219,16 +219,15 @@ function initTelegramApp() {
         tg.MainButton.text = "Связаться";
         tg.MainButton.show();
         
-        // Настройка для геолокации
-        tg.enableClosingConfirmation();
-        
         console.log('Telegram WebApp инициализирован');
         console.log('Пользователь:', user);
+        console.log('Платформа:', tg.platform);
+        console.log('Версия:', tg.version);
     } else {
         console.log('Запуск без Telegram (режим разработки)');
         user = {
             first_name: "Тестовый",
-            last_name: "Пользователь",
+            last_name: "Пользователь", 
             username: "test_user"
         };
     }
@@ -514,76 +513,76 @@ function requestPreciseLocation() {
         locationBtn.textContent = '⏳ Получаем...';
     }
     
-    // Сначала пробуем Telegram WebApp API
-    if (tg && tg.LocationManager) {
-        tg.LocationManager.getLocation((location) => {
-            if (location) {
+    // В Telegram WebApp используем стандартную геолокацию с улучшенными настройками
+    if (navigator.geolocation) {
+        const options = {
+            enableHighAccuracy: true,
+            timeout: 20000, // Увеличиваем таймаут для мобильных
+            maximumAge: 600000 // 10 минут
+        };
+        
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
                 userCoordinates = {
-                    latitude: location.latitude,
-                    longitude: location.longitude
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude
                 };
                 userManualLocation = null;
                 
-                if (locationBtn) locationBtn.textContent = '✅ Местоположение получено';
+                // Показываем конкретную информацию о местоположении
+                const accuracy = position.coords.accuracy;
+                const locationText = accuracy < 100 ? 
+                    `✅ Точное местоположение (±${Math.round(accuracy)}м)` : 
+                    `✅ Примерное местоположение (±${Math.round(accuracy)}м)`;
+                
+                if (locationBtn) locationBtn.textContent = locationText;
+                
                 updateServicesWithDistance();
                 
                 localStorage.setItem('userLocation', JSON.stringify({
                     type: 'coordinates',
-                    data: userCoordinates
+                    data: userCoordinates,
+                    accuracy: accuracy,
+                    timestamp: Date.now()
                 }));
-            } else {
-                fallbackToWebGeolocation();
-            }
-        }, (error) => {
-            console.error('Ошибка Telegram геолокации:', error);
-            fallbackToWebGeolocation();
-        });
-    } else {
-        fallbackToWebGeolocation();
-    }
-    
-    function fallbackToWebGeolocation() {
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    userCoordinates = {
-                        latitude: position.coords.latitude,
-                        longitude: position.coords.longitude
-                    };
-                    userManualLocation = null;
-                    
-                    if (locationBtn) locationBtn.textContent = '✅ Местоположение получено';
-                    updateServicesWithDistance();
-                    
-                    localStorage.setItem('userLocation', JSON.stringify({
-                        type: 'coordinates',
-                        data: userCoordinates
-                    }));
-                },
-                (error) => {
-                    console.error('Ошибка получения геолокации:', error);
-                    if (locationBtn) locationBtn.textContent = '❌ Не удалось получить';
-                    
-                    setTimeout(() => {
-                        if (confirm('Не удалось определить точное местоположение. Хотите выбрать район вручную?')) {
-                            showDistrictSelector();
-                        } else {
-                            if (locationBtn) locationBtn.textContent = '📍 Мое местоположение';
-                        }
-                    }, 1500);
-                },
-                {
-                    enableHighAccuracy: true,
-                    timeout: 15000,
-                    maximumAge: 300000
+                
+                console.log('Местоположение получено:', userCoordinates, 'точность:', accuracy);
+            },
+            (error) => {
+                console.error('Ошибка получения геолокации:', error);
+                
+                let errorMessage = '';
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMessage = 'Доступ запрещен';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMessage = 'Недоступно';
+                        break;
+                    case error.TIMEOUT:
+                        errorMessage = 'Время вышло';
+                        break;
+                    default:
+                        errorMessage = 'Ошибка';
                 }
-            );
-        } else {
-            if (locationBtn) locationBtn.textContent = '❌ Не поддерживается';
-            setTimeout(() => {
-                showDistrictSelector();
-            }, 1500);
-        }
+                
+                if (locationBtn) locationBtn.textContent = `❌ ${errorMessage}`;
+                
+                setTimeout(() => {
+                    if (confirm(`Не удалось определить местоположение (${errorMessage}). Хотите выбрать район вручную?`)) {
+                        showDistrictSelector();
+                    } else {
+                        if (locationBtn) locationBtn.textContent = '📍 Мое местоположение';
+                    }
+                }, 2000);
+            },
+            options
+        );
+    } else {
+        if (locationBtn) locationBtn.textContent = '❌ Не поддерживается';
+        setTimeout(() => {
+            showDistrictSelector();
+        }, 1500);
     }
 }
 
@@ -633,15 +632,15 @@ function selectDistrict(district) {
     
     const locationBtn = document.getElementById('locationBtn');
     if (locationBtn) {
-        locationBtn.textContent = `📍 ${district}`;
+        locationBtn.textContent = `📍 ${district} (выбран вручную)`;
     }
     
     updateServicesWithDistance();
     
-    // Сохраняем в localStorage
     localStorage.setItem('userLocation', JSON.stringify({
         type: 'district',
-        data: district
+        data: district,
+        timestamp: Date.now()
     }));
 }
 
@@ -714,17 +713,28 @@ function restoreUserLocation() {
             const locationData = JSON.parse(savedLocation);
             const locationBtn = document.getElementById('locationBtn');
             
-            if (locationData.type === 'coordinates') {
+            // Проверяем, не устарели ли данные (старше 24 часов)
+            const isExpired = locationData.timestamp && (Date.now() - locationData.timestamp > 24 * 60 * 60 * 1000);
+            
+            if (locationData.type === 'coordinates' && !isExpired) {
                 userCoordinates = locationData.data;
-                if (locationBtn) locationBtn.textContent = '✅ Местоположение получено';
+                const accuracy = locationData.accuracy || 0;
+                const locationText = accuracy < 100 ? 
+                    `✅ Точное местоположение` : 
+                    `✅ Примерное местоположение`;
+                if (locationBtn) locationBtn.textContent = locationText;
+                updateServicesWithDistance();
             } else if (locationData.type === 'district') {
                 userManualLocation = locationData.data;
                 if (locationBtn) locationBtn.textContent = `📍 ${locationData.data}`;
+                updateServicesWithDistance();
+            } else if (isExpired && locationBtn) {
+                locationBtn.textContent = '📍 Обновить местоположение';
+                localStorage.removeItem('userLocation');
             }
-            
-            updateServicesWithDistance();
         } catch (error) {
             console.error('Ошибка восстановления местоположения:', error);
+            localStorage.removeItem('userLocation');
         }
     }
 }
