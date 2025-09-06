@@ -11,16 +11,25 @@ const GOOGLE_SHEETS_CONFIG = {
 };
 
 let userLocation = null;
-const DISTRICTS = [
-    'Центральный', 'Северный', 'Южный', 'Восточный', 'Западный',
-    'Советский', 'Ленинский', 'Октябрьский', 'Железнодорожный',
-    'Автозаводский', 'Московский', 'Приокский', 'Канавинский'
-];
 
-// Метро станции для более точного позиционирования
-const METRO_STATIONS = {
-    'Центральная линия': ['Автозаводская', 'Парк Культуры', 'Московская', 'Чкаловская', 'Ленинская', 'Заречная'],
-    'Сормовская линия': ['Буревестник', 'Бурнаковская', 'Кировская', 'Пролетарская', 'Горьковская']
+
+const CITIES_DATA = {
+    'Нижний Новгород': {
+        districts: ['Центральный', 'Северный', 'Южный', 'Восточный', 'Западный', 'Советский', 'Ленинский', 'Октябрьский', 'Железнодорожный', 'Автозаводский', 'Московский', 'Приокский', 'Канавинский'],
+        metro: ['Автозаводская', 'Парк Культуры', 'Московская', 'Чкаловская', 'Ленинская', 'Заречная', 'Буревестник', 'Бурнаковская', 'Кировская', 'Пролетарская', 'Горьковская']
+    },
+    'Москва': {
+        districts: ['Центральный', 'Северный', 'Южный', 'Восточный', 'Западный', 'Северо-Восточный', 'Северо-Западный', 'Юго-Восточный', 'Юго-Западный', 'Зеленоградский'],
+        metro: ['Красная площадь', 'Арбатская', 'Театральная', 'Охотный ряд', 'Лубянка', 'Китай-город', 'Кузнецкий мост', 'Пушкинская', 'Тверская', 'Маяковская']
+    },
+    'Санкт-Петербург': {
+        districts: ['Центральный', 'Адмиралтейский', 'Василеостровский', 'Выборгский', 'Калининский', 'Кировский', 'Колпинский', 'Красногвардейский', 'Красносельский', 'Московский'],
+        metro: ['Невский проспект', 'Гостиный двор', 'Маяковская', 'Площадь Восстания', 'Владимирская', 'Пушкинская', 'Технологический институт', 'Сенная площадь']
+    },
+    'Другой город': {
+        districts: [],
+        metro: []
+    }
 };
 
 // Примерные координаты районов (широта, долгота)
@@ -477,6 +486,7 @@ function updateSearchPlaceholder(text) {
 }
 
 // Остальные функции
+// Замените requestLocation на универсальную версию:
 function requestLocation() {
     const locationModalHTML = `
         <div id="locationModal" style="
@@ -491,20 +501,10 @@ function requestLocation() {
                 <h3 style="margin: 0 0 16px 0; text-align: center;">Укажите местоположение</h3>
                 
                 <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <button onclick="detectLocationByIP()" style="
+                    <button onclick="showCitySelector()" style="
                         padding: 14px 20px; background: #4CAF50; color: white;
                         border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
-                    ">🌐 Определить по интернету</button>
-                    
-                    <button onclick="showDistrictSelector()" style="
-                        padding: 14px 20px; background: #2196F3; color: white;
-                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
-                    ">🏘️ Выбрать район</button>
-                    
-                    <button onclick="showMetroSelector()" style="
-                        padding: 14px 20px; background: #FF9800; color: white;
-                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
-                    ">🚇 Ближайшее метро</button>
+                    ">🏙️ Выбрать город</button>
                     
                     <button onclick="showMapLinkInput()" style="
                         padding: 14px 20px; background: #9C27B0; color: white;
@@ -1216,45 +1216,6 @@ function closeUserProfileModal() {
     closeAllModals();
 }
 
-// Определение по IP
-function detectLocationByIP() {
-    closeLocationModal();
-    
-    const locationBtn = document.getElementById('locationBtn');
-    if (locationBtn) locationBtn.textContent = '⏳ Определяем...';
-    
-    // Используем бесплатный API для определения города
-    fetch('https://ipapi.co/json/')
-        .then(response => response.json())
-        .then(data => {
-            console.log('IP location data:', data);
-            
-            if (data.city && data.city.includes('Нижний')) {
-                // Если это Нижний Новгород, предлагаем районы
-                userLocation = 'Центральный'; // По умолчанию
-                if (locationBtn) locationBtn.textContent = `🌐 ${data.city} (уточните район)`;
-                
-                setTimeout(() => {
-                    if (confirm('Определили ваш город как Нижний Новгород. Хотите уточнить район?')) {
-                        showDistrictSelector();
-                    }
-                }, 1000);
-            } else {
-                userLocation = data.city || 'Центральный';
-                if (locationBtn) locationBtn.textContent = `🌐 ${userLocation}`;
-            }
-            
-            updateServicesWithDistance();
-        })
-        .catch(error => {
-            console.error('Ошибка определения по IP:', error);
-            if (locationBtn) locationBtn.textContent = '❌ Не определилось';
-            
-            setTimeout(() => {
-                showDistrictSelector();
-            }, 1500);
-        });
-}
 
 // Выбор станции метро
 function showMetroSelector() {
@@ -1376,8 +1337,6 @@ function parseMapLink() {
     }
     
     const locationBtn = document.getElementById('locationBtn');
-    
-    // Парсим разные форматы ссылок
     let coords = null;
     
     // 2ГИС: https://2gis.ru/geo/70000001103455323/37.622133,55.753084
@@ -1386,23 +1345,37 @@ function parseMapLink() {
         coords = { lat: parseFloat(gisMatch[2]), lon: parseFloat(gisMatch[1]) };
     }
     
-    // Яндекс: https://yandex.ru/maps/?ll=37.622133%2C55.753084
-    const yandexMatch = link.match(/ll=([0-9.-]+)%2C([0-9.-]+)/);
+    // Яндекс: сокращенная ссылка или полная
+    const yandexMatch = link.match(/(?:ll=([0-9.-]+)%2C([0-9.-]+)|\/([0-9.-]+),([0-9.-]+))/);
     if (yandexMatch) {
-        coords = { lat: parseFloat(yandexMatch[2]), lon: parseFloat(yandexMatch[1]) };
+        if (yandexMatch[1] && yandexMatch[2]) {
+            coords = { lat: parseFloat(yandexMatch[2]), lon: parseFloat(yandexMatch[1]) };
+        } else if (yandexMatch[3] && yandexMatch[4]) {
+            coords = { lat: parseFloat(yandexMatch[4]), lon: parseFloat(yandexMatch[3]) };
+        }
     }
     
-    // Google: https://maps.google.com/?q=55.753084,37.622133
-    const googleMatch = link.match(/q=([0-9.-]+),([0-9.-]+)/);
+    // Google Maps: различные форматы
+    const googleMatch = link.match(/(?:q=([0-9.-]+),([0-9.-]+)|@([0-9.-]+),([0-9.-]+)|place\/.*?\/(@[0-9.-]+,[0-9.-]+))/);
     if (googleMatch) {
-        coords = { lat: parseFloat(googleMatch[1]), lon: parseFloat(googleMatch[2]) };
+        if (googleMatch[1] && googleMatch[2]) {
+            coords = { lat: parseFloat(googleMatch[1]), lon: parseFloat(googleMatch[2]) };
+        } else if (googleMatch[3] && googleMatch[4]) {
+            coords = { lat: parseFloat(googleMatch[3]), lon: parseFloat(googleMatch[4]) };
+        }
+    }
+    
+    // Apple Maps: упрощенный парсинг
+    if (link.includes('maps.apple.com') && !coords) {
+        alert('Для Apple Maps используйте "Поделиться" → "Скопировать координаты" и вставьте в формате: 55.7558,37.6176');
+        return;
     }
     
     if (coords) {
-        userLocation = `📍 ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}`;
+        userLocation = `${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}`;
         
         if (locationBtn) {
-            locationBtn.textContent = userLocation;
+            locationBtn.textContent = `🗺️ ${userLocation}`;
         }
         
         updateServicesWithDistance();
@@ -1415,11 +1388,206 @@ function parseMapLink() {
         
         closeMapLinkModal();
     } else {
-        alert('Не удалось распознать ссылку. Попробуйте другую ссылку или выберите район вручную.');
+        alert('Не удалось распознать ссылку. Попробуйте:\n\n• 2ГИС: кнопка "Поделиться"\n• Яндекс: кнопка "Поделиться" → короткая ссылка\n• Google: долгое нажатие на точку → "Поделиться"\n\nИли выберите город вручную.');
     }
 }
 
 function closeMapLinkModal() {
     const modal = document.getElementById('mapLinkModal');
+    if (modal) modal.remove();
+}
+
+
+function showCitySelector() {
+    closeLocationModal();
+    
+    const citiesHTML = `
+        <div id="cityModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+                max-height: 80vh; overflow-y: auto;
+            ">
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Выберите город</h3>
+                
+                <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+                    ${Object.keys(CITIES_DATA).map(city => `
+                        <button onclick="selectCity('${city}')" style="
+                            padding: 12px 16px; background: #f8f9fa; border: 1px solid #e0e0e0;
+                            border-radius: 8px; text-align: left; cursor: pointer; transition: all 0.2s;
+                        " onmouseover="this.style.background='#e8f5e8'; this.style.borderColor='#4CAF50'"
+                           onmouseout="this.style.background='#f8f9fa'; this.style.borderColor='#e0e0e0'">
+                            ${city}
+                        </button>
+                    `).join('')}
+                </div>
+                
+                <button onclick="closeCityModal()" style="
+                    width: 100%; margin-top: 16px; padding: 12px; background: #f0f0f0; color: #333;
+                    border: none; border-radius: 8px; cursor: pointer;
+                ">Отмена</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', citiesHTML);
+}
+
+function selectCity(city) {
+    closeCityModal();
+    
+    if (city === 'Другой город') {
+        showManualLocationInput();
+        return;
+    }
+    
+    const cityData = CITIES_DATA[city];
+    if (!cityData) return;
+    
+    // Показываем выбор района/метро для выбранного города
+    showLocationOptionsForCity(city, cityData);
+}
+
+function showLocationOptionsForCity(city, cityData) {
+    const optionsHTML = `
+        <div id="locationOptionsModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+                max-height: 80vh; overflow-y: auto;
+            ">
+                <h3 style="margin: 0 0 16px 0; text-align: center;">${city}</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    ${cityData.districts.length > 0 ? `
+                    <button onclick="showDistrictSelector('${city}')" style="
+                        padding: 14px 20px; background: #2196F3; color: white;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">🏘️ Выбрать район</button>
+                    ` : ''}
+                    
+                    ${cityData.metro.length > 0 ? `
+                    <button onclick="showMetroSelector('${city}')" style="
+                        padding: 14px 20px; background: #FF9800; color: white;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">🚇 Ближайшее метро</button>
+                    ` : ''}
+                    
+                    <button onclick="setJustCity('${city}')" style="
+                        padding: 14px 20px; background: #4CAF50; color: white;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">✅ Просто ${city}</button>
+                    
+                    <button onclick="closeLocationOptionsModal()" style="
+                        padding: 14px 20px; background: #f0f0f0; color: #333;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">Назад</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', optionsHTML);
+}
+
+function showManualLocationInput() {
+    const manualHTML = `
+        <div id="manualLocationModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+            ">
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Введите местоположение</h3>
+                
+                <input type="text" id="manualLocationInput" placeholder="Город, район или адрес..." style="
+                    width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
+                    margin-bottom: 16px; font-size: 14px;
+                ">
+                
+                <div style="display: flex; gap: 12px;">
+                    <button onclick="setManualLocation()" style="
+                        flex: 1; padding: 12px; background: #4CAF50; color: white;
+                        border: none; border-radius: 8px; font-weight: 600;
+                    ">Сохранить</button>
+                    <button onclick="closeManualLocationModal()" style="
+                        flex: 1; padding: 12px; background: #f0f0f0; color: #333;
+                        border: none; border-radius: 8px; font-weight: 600;
+                    ">Отмена</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', manualHTML);
+}
+
+function setManualLocation() {
+    const input = document.getElementById('manualLocationInput');
+    const location = input.value.trim();
+    
+    if (!location) {
+        alert('Введите местоположение');
+        return;
+    }
+    
+    userLocation = location;
+    
+    const locationBtn = document.getElementById('locationBtn');
+    if (locationBtn) {
+        locationBtn.textContent = `📍 ${location}`;
+    }
+    
+    updateServicesWithDistance();
+    
+    localStorage.setItem('userLocation', JSON.stringify({
+        type: 'manual',
+        data: location,
+        timestamp: Date.now()
+    }));
+    
+    closeManualLocationModal();
+}
+
+function setJustCity(city) {
+    closeLocationOptionsModal();
+    
+    userLocation = city;
+    
+    const locationBtn = document.getElementById('locationBtn');
+    if (locationBtn) {
+        locationBtn.textContent = `🏙️ ${city}`;
+    }
+    
+    updateServicesWithDistance();
+    
+    localStorage.setItem('userLocation', JSON.stringify({
+        type: 'city',
+        data: city,
+        timestamp: Date.now()
+    }));
+}
+
+// Обновите функции закрытия модальных окон:
+function closeCityModal() {
+    const modal = document.getElementById('cityModal');
+    if (modal) modal.remove();
+}
+
+function closeLocationOptionsModal() {
+    const modal = document.getElementById('locationOptionsModal');
+    if (modal) modal.remove();
+}
+
+function closeManualLocationModal() {
+    const modal = document.getElementById('manualLocationModal');
     if (modal) modal.remove();
 }
