@@ -18,29 +18,82 @@ const METRO_STATIONS = {
 let userLocation = null;
 
 
-// Основные города России с районами (выборочно)
 const RUSSIA_CITIES = {
     'Москва': {
-        districts: ['ЦАО', 'САО', 'СВАО', 'ВАО', 'ЮВАО', 'ЮАО', 'ЮЗАО', 'ЗАО', 'СЗАО', 'Зеленоград'],
+        districts: {
+            'ЦАО': [55.7558, 37.6176],
+            'САО': [55.8094, 37.6403],
+            'СВАО': [55.8551, 37.6423],
+            'ВАО': [55.7887, 37.7173],
+            'ЮВАО': [55.7047, 37.6598],
+            'ЮАО': [55.6220, 37.6068],
+            'ЮЗАО': [55.6513, 37.5394],
+            'ЗАО': [55.7402, 37.5398],
+            'СЗАО': [55.8203, 37.4960],
+            'Зеленоград': [55.9811, 37.1814]
+        },
         coords: [55.7558, 37.6176]
     },
     'Санкт-Петербург': {
-        districts: ['Адмиралтейский', 'Василеостровский', 'Выборгский', 'Калининский', 'Кировский', 'Колпинский', 'Красногвардейский', 'Красносельский', 'Московский', 'Невский', 'Петроградский', 'Петродворцовый', 'Приморский', 'Пушкинский', 'Фрунзенский', 'Центральный', 'Курортный', 'Кронштадтский'],
+        districts: {
+            'Адмиралтейский': [59.9386, 30.3141],
+            'Василеостровский': [59.9434, 30.2734],
+            'Выборгский': [60.0498, 30.3117],
+            'Калининский': [59.9720, 30.4173],
+            'Кировский': [59.8794, 30.2628],
+            'Колпинский': [59.7539, 30.5900],
+            'Красногвардейский': [59.9710, 30.4614],
+            'Красносельский': [59.7559, 30.0806],
+            'Московский': [59.8516, 30.3199],
+            'Невский': [59.9276, 30.4813],
+            'Петроградский': [59.9571, 30.3078],
+            'Петродворцовый': [59.8844, 29.9089],
+            'Приморский': [60.0144, 30.2056],
+            'Пушкинский': [59.7137, 30.4131],
+            'Фрунзенский': [59.8674, 30.3226],
+            'Центральный': [59.9311, 30.3609],
+            'Курортный': [60.1506, 29.9756],
+            'Кронштадтский': [59.9886, 29.7661]
+        },
         coords: [59.9311, 30.3609]
     },
     'Нижний Новгород': {
-        districts: ['Автозаводский', 'Ленинский', 'Московский', 'Нижегородский', 'Приокский', 'Советский', 'Сормовский', 'Канавинский'],
+        districts: {
+            'Автозаводский': [56.2700, 43.8700],
+            'Ленинский': [56.3200, 44.0200],
+            'Московский': [56.3600, 43.9300],
+            'Нижегородский': [56.3287, 44.0020],
+            'Приокский': [56.2900, 44.0700],
+            'Советский': [56.3400, 43.9800],
+            'Сормовский': [56.3650, 43.9000],
+            'Канавинский': [56.3400, 44.0400]
+        },
         coords: [56.3287, 44.0020]
     },
     'Екатеринбург': {
-        districts: ['Ленинский', 'Октябрьский', 'Чкаловский', 'Железнодорожный', 'Орджоникидзевский', 'Кировский', 'Верх-Исетский'],
+        districts: {
+            'Ленинский': [56.8200, 60.6000],
+            'Октябрьский': [56.8700, 60.6200],
+            'Чкаловский': [56.8500, 60.6800],
+            'Железнодорожный': [56.8300, 60.6900],
+            'Орджоникидзевский': [56.9000, 60.6400],
+            'Кировский': [56.8000, 60.5400],
+            'Верх-Исетский': [56.8100, 60.5700]
+        },
         coords: [56.8431, 60.6454]
     },
     'Казань': {
-        districts: ['Авиастроительный', 'Вахитовский', 'Кировский', 'Московский', 'Ново-Савиновский', 'Приволжский', 'Советский'],
+        districts: {
+            'Авиастроительный': [55.7500, 49.2100],
+            'Вахитовский': [55.7887, 49.1221],
+            'Кировский': [55.8200, 49.0400],
+            'Московский': [55.8400, 49.1000],
+            'Ново-Савиновский': [55.8100, 49.1300],
+            'Приволжский': [55.7700, 49.1700],
+            'Советский': [55.8000, 49.1100]
+        },
         coords: [55.8304, 49.0661]
     }
-    // Добавьте нужные города...
 };
 
 // Примерные координаты районов (широта, долгота)
@@ -1286,21 +1339,21 @@ function showMapLinkInput() {
                     <div>
                         <a href="https://2gis.ru" target="_blank" style="color: #2196F3; text-decoration: none;">
                             📍 2GIS
-                        </a>
+                        </a> - вы можете нажать кнопку "Поделиться" и скопировать ссылку сюда
                     </div>
                 </div>
                 
                 <p style="color: #666; font-size: 14px; margin: 0 0 8px 0;">
-                    Введите координаты (широта, долгота):
+                    Введите координаты или ссылку 2GIS:
                 </p>
                 
-                <input type="text" id="coordinatesInput" placeholder="55.7558, 37.6176" style="
+                <input type="text" id="coordinatesInput" placeholder="55.7558, 37.6176 или ссылка 2GIS" style="
                     width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
                     margin-bottom: 16px; font-size: 14px;
                 ">
                 
                 <div style="display: flex; gap: 12px;">
-                    <button onclick="parseCoordinates()" style="
+                    <button onclick="parseCoordinatesOrLink()" style="
                         flex: 1; padding: 12px; background: #4CAF50; color: white;
                         border: none; border-radius: 8px; font-weight: 600;
                     ">Определить адрес</button>
@@ -1455,6 +1508,8 @@ function selectFoundCity(cityName, isLocal) {
 }
 
 function showLocationOptionsForCity(city, cityData) {
+    console.log('Показываем опции для города:', city, cityData);
+    
     const optionsHTML = `
         <div id="locationOptionsModal" style="
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -1468,11 +1523,11 @@ function showLocationOptionsForCity(city, cityData) {
                 <h3 style="margin: 0 0 16px 0; text-align: center;">${city}</h3>
                 
                 <div style="display: flex; flex-direction: column; gap: 12px;">
-                    ${cityData.districts && cityData.districts.length > 0 ? `
+                    ${cityData.districts && Object.keys(cityData.districts).length > 0 ? `
                     <button onclick="showDistrictSelectorForCity('${city}')" style="
                         padding: 14px 20px; background: #2196F3; color: white;
                         border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
-                    ">🏘️ Выбрать район</button>
+                    ">🏘️ Выбрать район (${Object.keys(cityData.districts).length})</button>
                     ` : ''}
                     
                     <button onclick="setJustCity('${city}')" style="
@@ -1496,7 +1551,7 @@ function showDistrictSelector() {
     closeLocationModal();
     
     // Используем районы Нижнего Новгорода по умолчанию (можно изменить)
-    const districts = RUSSIA_CITIES['Нижний Новгород'].districts;
+    const districts = Object.keys(RUSSIA_CITIES['Нижний Новгород'].districts);
     
     const districtHTML = `
         <div id="districtModal" style="
@@ -1649,24 +1704,38 @@ function closeManualLocationModal() {
 }
 
 
-async function parseCoordinates() {
+async function parseCoordinatesOrLink() {
     const input = document.getElementById('coordinatesInput');
-    const coords = input.value.trim();
+    const inputValue = input.value.trim();
     
-    if (!coords) {
-        alert('Введите координаты');
+    if (!inputValue) {
+        alert('Введите координаты или ссылку');
         return;
     }
     
-    // Парсим координаты
-    const coordMatch = coords.match(/([0-9.-]+)[,\s]+([0-9.-]+)/);
-    if (!coordMatch) {
-        alert('Неверный формат. Используйте: 55.7558, 37.6176');
-        return;
-    }
+    let lat, lon;
     
-    const lat = parseFloat(coordMatch[1]);
-    const lon = parseFloat(coordMatch[2]);
+    // Проверяем, является ли это ссылкой 2GIS
+    if (inputValue.includes('2gis.ru')) {
+        const gisMatch = inputValue.match(/2gis\.ru\/.*?\/([0-9.-]+),([0-9.-]+)/);
+        if (gisMatch) {
+            lat = parseFloat(gisMatch[2]);
+            lon = parseFloat(gisMatch[1]);
+        } else {
+            alert('Неверный формат ссылки 2GIS. Убедитесь, что скопировали ссылку "Поделиться".');
+            return;
+        }
+    } else {
+        // Парсим как обычные координаты
+        const coordMatch = inputValue.match(/([0-9.-]+)[,\s]+([0-9.-]+)/);
+        if (!coordMatch) {
+            alert('Неверный формат. Используйте: 55.7558, 37.6176 или ссылку 2GIS');
+            return;
+        }
+        
+        lat = parseFloat(coordMatch[1]);
+        lon = parseFloat(coordMatch[2]);
+    }
     
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
         alert('Координаты вне допустимых пределов');
@@ -1677,14 +1746,12 @@ async function parseCoordinates() {
     if (locationBtn) locationBtn.textContent = '⏳ Определяем адрес...';
     
     try {
-        // Используем бесплатный API Nominatim (OpenStreetMap)
         const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ru`);
         const data = await response.json();
         
         let address = 'Неизвестное место';
         
         if (data && data.display_name) {
-            // Извлекаем нужные части адреса
             const parts = [];
             if (data.address) {
                 if (data.address.road) parts.push(data.address.road);
@@ -1718,7 +1785,6 @@ async function parseCoordinates() {
     } catch (error) {
         console.error('Ошибка определения адреса:', error);
         
-        // Fallback - сохраняем просто координаты
         userLocation = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
         
         if (locationBtn) {
@@ -1852,7 +1918,7 @@ function showDistrictSelectorForCity(city) {
                 <h3 style="margin: 0 0 16px 0; text-align: center;">Районы - ${city}</h3>
                 
                 <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
-                    ${cityData.districts.map(district => `
+                    ${Object.keys(cityData.districts).map(district => `
                         <button onclick="selectDistrictInCity('${city}', '${district}')" style="
                             padding: 12px 16px; background: #f8f9fa; border: 1px solid #e0e0e0;
                             border-radius: 8px; text-align: left; cursor: pointer; transition: all 0.2s;
