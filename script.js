@@ -371,11 +371,19 @@ function createServiceCard(service) {
             ">
                 ${service.provider}
             </div>
+            // В функции createServiceCard найдите блок service-actions и замените на:
             <div class="service-actions" style="display: flex; gap: 8px;">
-                <button class="btn-small btn-primary" onclick="showServiceDetails(${JSON.stringify(service).replace(/"/g, '&quot;')})">
+                <button class="btn-small btn-primary" onclick="showServiceDetails(${service.id})">
                     Подробнее
                 </button>
-                <button class="btn-small btn-secondary" onclick="contactProvider(${JSON.stringify(service).replace(/"/g, '&quot;')})">
+                <button class="btn-small btn-secondary" onclick="contactProvider({
+                    id: ${service.id},
+                    title: '${service.title.replace(/'/g, "\\'")}',
+                    description: '${service.description.replace(/'/g, "\\'")}',
+                    provider: '${service.provider.replace(/'/g, "\\'")}',
+                    contact: '${service.contact}',
+                    type: '${service.type}'
+                })">
                     Связаться
                 </button>
             </div>
@@ -480,32 +488,14 @@ function contactProvider(service) {
     const isRequest = service.type === 'request';
     const message = isRequest ? 
         `Здравствуйте! Я могу помочь с вашей просьбой "${service.title}". Готов обсудить детали.` :
-        `Здравствуйте! Меня интересует ваша услуга "${service.title}". Можем обсудить детали?`;
+        `Здравствуйте! Меня интересует вашу услугу "${service.title}". Хочу задать пару вопросов по деталям и условиям.`;
     
     // Извлекаем username без @
     const username = service.contact.replace('@', '');
-    const telegramUrl = `https://t.me/${username}`;
+    const telegramUrl = `https://t.me/${username}?text=${encodeURIComponent(message)}`;
     
-    if (tg) {
-        // Отправляем данные в родительский бот
-        tg.sendData(JSON.stringify({
-            action: 'contact_provider',
-            service_id: service.id,
-            service_title: service.title,
-            provider_contact: service.contact,
-            message: message,
-            telegram_url: telegramUrl
-        }));
-        
-        // Открываем Telegram напрямую
-        window.open(telegramUrl, '_blank');
-        
-        tg.showAlert(`Переходим к диалогу с ${service.provider}`);
-    } else {
-        // В режиме разработки просто открываем Telegram
-        window.open(telegramUrl, '_blank');
-        alert(`Открываем диалог с ${service.provider}`);
-    }
+    // Показываем подтверждение перехода
+    showContactConfirmation(service.provider, telegramUrl, message);
 }
 
 function showAddServiceForm() {
@@ -633,7 +623,19 @@ if (tg) {
 console.log('NeighborHelp app с упрощенной Google Sheets интеграцией загружен!');
 
 // Показать подробную информацию об услуге/просьбе
-function showServiceDetails(service) {
+function showServiceDetails(serviceData) {
+    // Если передан только ID, найдем полные данные
+    let service;
+    if (typeof serviceData === 'number') {
+        service = allData.find(item => item.id === serviceData);
+        if (!service) {
+            alert('Услуга не найдена');
+            return;
+        }
+    } else {
+        service = serviceData;
+    }
+    
     const isRequest = service.type === 'request';
     const modalTitle = isRequest ? 'Подробности просьбы' : 'Подробности услуги';
     
@@ -702,12 +704,27 @@ function showServiceDetails(service) {
                         </div>
                     </div>
                     
+                    // В функции showServiceDetails найдите и замените блок service-detail-actions:
                     <div class="service-detail-actions" style="display: flex; gap: 12px;">
-                        <button onclick="contactProvider(${JSON.stringify(service).replace(/"/g, '&quot;')})" style="
+                        <button onclick="contactProvider({
+                            id: ${service.id},
+                            title: '${service.title.replace(/'/g, "\\'")}',
+                            description: '${service.description.replace(/'/g, "\\'")}',
+                            provider: '${service.provider.replace(/'/g, "\\'")}',
+                            contact: '${service.contact}',
+                            type: '${service.type}'
+                        })" style="
                             flex: 2; padding: 14px 20px; background: #4CAF50; color: white;
                             border: none; border-radius: 8px; font-weight: 600; font-size: 16px; cursor: pointer;
                         ">💬 Написать в Telegram</button>
-                        <button onclick="shareService(${JSON.stringify(service).replace(/"/g, '&quot;')})" style="
+                        <button onclick="shareService({
+                            id: ${service.id},
+                            title: '${service.title.replace(/'/g, "\\'")}',
+                            description: '${service.description.replace(/'/g, "\\'")}',
+                            provider: '${service.provider.replace(/'/g, "\\'")}',
+                            contact: '${service.contact}',
+                            type: '${service.type}'
+                        })" style="
                             flex: 1; padding: 14px 16px; background: #2196F3; color: white;
                             border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
                         ">📤</button>
@@ -868,21 +885,12 @@ function contactProvider(service) {
 
 function contactUserDirectly(userContact) {
     const username = userContact.replace('@', '');
-    const telegramUrl = `https://t.me/${username}`;
+    const message = `Здравствуйте! Увидел ваш профиль в приложении NeighborHelp. Хотел бы обсудить возможность сотрудничества.`;
+    const telegramUrl = `https://t.me/${username}?text=${encodeURIComponent(message)}`;
     
-    if (tg) {
-        tg.sendData(JSON.stringify({
-            action: 'contact_user',
-            user_contact: userContact,
-            telegram_url: telegramUrl
-        }));
-        
-        window.open(telegramUrl, '_blank');
-        tg.showAlert(`Переходим к диалогу с пользователем`);
-    } else {
-        window.open(telegramUrl, '_blank');
-        alert(`Открываем диалог с пользователем`);
-    }
+    // Извлекаем имя из контакта для отображения
+    const displayName = userContact;
+    showContactConfirmation(displayName, telegramUrl, message);
 }
 
 // Поделиться услугой
@@ -953,6 +961,79 @@ function openServiceFromProfile(service) {
     // Закрываем профиль и открываем детали услуги
     closeUserProfileModal();
     showServiceDetails(service);
+}
+
+function showContactConfirmation(providerName, telegramUrl, message) {
+    const confirmHTML = `
+        <div id="contactConfirmModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1002;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+                text-align: center;
+            ">
+                <h3 style="margin: 0 0 16px 0; color: #333;">Переход в диалог</h3>
+                
+                <div style="margin-bottom: 20px;">
+                    <p style="color: #666; margin: 0 0 12px 0; line-height: 1.5;">
+                        При переходе в диалог с <strong>${providerName}</strong> приложение закроется.
+                    </p>
+                    <p style="color: #666; margin: 0; font-size: 14px;">
+                        Вы уверены, что хотите продолжить?
+                    </p>
+                </div>
+                
+                <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
+                    <p style="margin: 0; font-size: 12px; color: #555; font-style: italic;">
+                        Заготовка сообщения:<br>
+                        "${message}"
+                    </p>
+                </div>
+                
+                <div style="display: flex; gap: 12px;">
+                    <button onclick="confirmContact('${telegramUrl}')" style="
+                        flex: 1; padding: 12px 20px; background: #4CAF50; color: white;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">Да, перейти</button>
+                    <button onclick="closeContactConfirmModal()" style="
+                        flex: 1; padding: 12px 20px; background: #f0f0f0; color: #333;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">Назад</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', confirmHTML);
+}
+
+function confirmContact(telegramUrl) {
+    // Закрываем модальное окно подтверждения
+    closeContactConfirmModal();
+    
+    // Открываем Telegram
+    if (tg) {
+        tg.sendData(JSON.stringify({
+            action: 'opening_telegram',
+            url: telegramUrl
+        }));
+    }
+    
+    window.open(telegramUrl, '_blank');
+    
+    // Показываем сообщение об успешном переходе
+    if (tg) {
+        tg.showAlert('Переходим в Telegram...');
+    }
+}
+
+function closeContactConfirmModal() {
+    const modal = document.getElementById('contactConfirmModal');
+    if (modal) {
+        modal.remove();
+    }
 }
 
 function closeServiceDetailsModal() {
