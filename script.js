@@ -309,7 +309,7 @@ function initTelegramApp() {
         document.body.style.backgroundColor = tg.backgroundColor || '#ffffff';
         
         tg.MainButton.text = "Связаться";
-        tg.MainButton.show();
+        // tg.MainButton.show();
     } else {
         console.log('=== БРАУЗЕРНЫЙ РЕЖИМ ===');
         user = {
