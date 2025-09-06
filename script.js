@@ -466,7 +466,17 @@ function updateSearchPlaceholder(text) {
 function requestLocation() {
     const locationBtn = document.getElementById('locationBtn');
     
-    // Показываем модальное окно выбора способа указания местоположения
+    // Если в Telegram WebApp и нет HTTPS, сразу показываем выбор района
+    if (tg && window.location.protocol !== 'https:') {
+        if (locationBtn) {
+            locationBtn.textContent = '🏘️ Выберите район';
+        }
+        setTimeout(() => {
+            showDistrictSelector();
+        }, 500);
+        return;
+    }
+    
     const locationModalHTML = `
         <div id="locationModal" style="
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -483,10 +493,12 @@ function requestLocation() {
                 </p>
                 
                 <div style="display: flex; flex-direction: column; gap: 12px;">
+                    ${window.location.protocol === 'https:' ? `
                     <button onclick="requestPreciseLocation()" style="
                         padding: 14px 20px; background: #4CAF50; color: white;
                         border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
                     ">📍 Определить точно (GPS)</button>
+                    ` : ''}
                     
                     <button onclick="showDistrictSelector()" style="
                         padding: 14px 20px; background: #2196F3; color: white;
@@ -513,77 +525,102 @@ function requestPreciseLocation() {
         locationBtn.textContent = '⏳ Получаем...';
     }
     
-    // В Telegram WebApp используем стандартную геолокацию с улучшенными настройками
-    if (navigator.geolocation) {
-        const options = {
-            enableHighAccuracy: true,
-            timeout: 20000, // Увеличиваем таймаут для мобильных
-            maximumAge: 600000 // 10 минут
-        };
-        
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                userCoordinates = {
-                    latitude: position.coords.latitude,
-                    longitude: position.coords.longitude
-                };
-                userManualLocation = null;
-                
-                // Показываем конкретную информацию о местоположении
-                const accuracy = position.coords.accuracy;
-                const locationText = accuracy < 100 ? 
-                    `✅ Точное местоположение (±${Math.round(accuracy)}м)` : 
-                    `✅ Примерное местоположение (±${Math.round(accuracy)}м)`;
-                
-                if (locationBtn) locationBtn.textContent = locationText;
-                
-                updateServicesWithDistance();
-                
-                localStorage.setItem('userLocation', JSON.stringify({
-                    type: 'coordinates',
-                    data: userCoordinates,
-                    accuracy: accuracy,
-                    timestamp: Date.now()
-                }));
-                
-                console.log('Местоположение получено:', userCoordinates, 'точность:', accuracy);
-            },
-            (error) => {
-                console.error('Ошибка получения геолокации:', error);
-                
-                let errorMessage = '';
-                switch(error.code) {
-                    case error.PERMISSION_DENIED:
-                        errorMessage = 'Доступ запрещен';
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        errorMessage = 'Недоступно';
-                        break;
-                    case error.TIMEOUT:
-                        errorMessage = 'Время вышло';
-                        break;
-                    default:
-                        errorMessage = 'Ошибка';
-                }
-                
-                if (locationBtn) locationBtn.textContent = `❌ ${errorMessage}`;
-                
-                setTimeout(() => {
-                    if (confirm(`Не удалось определить местоположение (${errorMessage}). Хотите выбрать район вручную?`)) {
-                        showDistrictSelector();
-                    } else {
-                        if (locationBtn) locationBtn.textContent = '📍 Мое местоположение';
-                    }
-                }, 2000);
-            },
-            options
-        );
-    } else {
+    // Проверяем HTTPS
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        if (locationBtn) locationBtn.textContent = '❌ Нужен HTTPS';
+        setTimeout(() => {
+            alert('Для определения местоположения требуется защищенное соединение (HTTPS). Выберите район вручную.');
+            showDistrictSelector();
+        }, 1000);
+        return;
+    }
+    
+    // Проверяем поддержку геолокации
+    if (!navigator.geolocation) {
         if (locationBtn) locationBtn.textContent = '❌ Не поддерживается';
         setTimeout(() => {
             showDistrictSelector();
         }, 1500);
+        return;
     }
+    
+    const options = {
+        enableHighAccuracy: true,
+        timeout: 25000, // Увеличиваем таймаут
+        maximumAge: 300000 // 5 минут
+    };
+    
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            userCoordinates = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude
+            };
+            userManualLocation = null;
+            
+            const accuracy = position.coords.accuracy;
+            let locationText;
+            
+            if (accuracy < 50) {
+                locationText = `✅ Точное местоположение (${Math.round(accuracy)}м)`;
+            } else if (accuracy < 200) {
+                locationText = `✅ Хорошее местоположение (${Math.round(accuracy)}м)`;
+            } else if (accuracy < 1000) {
+                locationText = `✅ Примерное местоположение (${Math.round(accuracy)}м)`;
+            } else {
+                locationText = `✅ Грубое местоположение (~${Math.round(accuracy/1000)}км)`;
+            }
+            
+            if (locationBtn) locationBtn.textContent = locationText;
+            
+            updateServicesWithDistance();
+            
+            localStorage.setItem('userLocation', JSON.stringify({
+                type: 'coordinates',
+                data: userCoordinates,
+                accuracy: accuracy,
+                timestamp: Date.now()
+            }));
+            
+            console.log('Местоположение получено:', userCoordinates, 'точность:', accuracy);
+        },
+        (error) => {
+            console.error('Ошибка геолокации:', error);
+            
+            let errorMessage = '';
+            let userMessage = '';
+            
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage = 'Доступ запрещен';
+                    userMessage = 'Вы запретили доступ к местоположению. Можете выбрать район вручную или разрешить доступ в настройках браузера.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage = 'Недоступно';
+                    userMessage = 'Не удалось определить местоположение. Попробуйте выбрать район вручную.';
+                    break;
+                case error.TIMEOUT:
+                    errorMessage = 'Время вышло';
+                    userMessage = 'Определение местоположения заняло слишком много времени. Попробуйте еще раз или выберите район вручную.';
+                    break;
+                default:
+                    errorMessage = 'Ошибка';
+                    userMessage = 'Произошла неизвестная ошибка. Выберите район вручную.';
+            }
+            
+            if (locationBtn) locationBtn.textContent = `❌ ${errorMessage}`;
+            
+            // Показываем диалог с объяснением
+            setTimeout(() => {
+                if (confirm(`${userMessage}\n\nХотите выбрать район вручную?`)) {
+                    showDistrictSelector();
+                } else {
+                    if (locationBtn) locationBtn.textContent = '📍 Мое местоположение';
+                }
+            }, 1000);
+        },
+        options
+    );
 }
 
 function showDistrictSelector() {
@@ -1292,4 +1329,43 @@ function closeServiceDetailsModal() {
 
 function closeUserProfileModal() {
     closeAllModals();
+}
+
+
+// Функция для отладки геолокации
+function debugLocation() {
+    console.log('=== DEBUG LOCATION ===');
+    console.log('navigator.geolocation:', navigator.geolocation);
+    console.log('tg.platform:', tg?.platform);
+    console.log('userAgent:', navigator.userAgent);
+    console.log('https:', window.location.protocol === 'https:');
+    console.log('userCoordinates:', userCoordinates);
+    console.log('userManualLocation:', userManualLocation);
+    
+    if (navigator.geolocation) {
+        console.log('Тестируем геолокацию...');
+        navigator.geolocation.getCurrentPosition(
+            (pos) => console.log('SUCCESS:', pos),
+            (err) => console.log('ERROR:', err),
+            { timeout: 10000 }
+        );
+    }
+}
+
+// Добавьте эту функцию в конец файла
+function handleLocationInTelegram() {
+    // В Telegram WebApp можем попробовать получить город через IP
+    if (tg) {
+        // Отправляем запрос боту для определения примерного местоположения
+        tg.sendData(JSON.stringify({
+            action: 'request_location',
+            user_id: user?.id,
+            platform: tg.platform
+        }));
+        
+        // Показываем диалог выбора района
+        setTimeout(() => {
+            showDistrictSelector();
+        }, 1000);
+    }
 }
