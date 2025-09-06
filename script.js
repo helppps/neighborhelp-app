@@ -210,21 +210,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Инициализация Telegram WebApp
 function initTelegramApp() {
+    console.log('=== ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ===');
+    console.log('URL:', window.location.href);
+    console.log('Protocol:', window.location.protocol);
+    console.log('Host:', window.location.host);
+    console.log('User Agent:', navigator.userAgent);
+    console.log('Geolocation support:', !!navigator.geolocation);
+    
     if (tg) {
         tg.ready();
         user = tg.initDataUnsafe?.user;
+        
+        console.log('=== TELEGRAM WEBAPP ===');
+        console.log('Platform:', tg.platform);
+        console.log('Version:', tg.version);
+        console.log('User:', user);
+        console.log('Color scheme:', tg.colorScheme);
+        console.log('Safe area:', tg.safeAreaInset);
         
         document.body.style.backgroundColor = tg.backgroundColor || '#ffffff';
         
         tg.MainButton.text = "Связаться";
         tg.MainButton.show();
-        
-        console.log('Telegram WebApp инициализирован');
-        console.log('Пользователь:', user);
-        console.log('Платформа:', tg.platform);
-        console.log('Версия:', tg.version);
     } else {
-        console.log('Запуск без Telegram (режим разработки)');
+        console.log('=== БРАУЗЕРНЫЙ РЕЖИМ ===');
         user = {
             first_name: "Тестовый",
             last_name: "Пользователь", 
@@ -466,17 +475,19 @@ function updateSearchPlaceholder(text) {
 function requestLocation() {
     const locationBtn = document.getElementById('locationBtn');
     
-    // Если в Telegram WebApp и нет HTTPS, сразу показываем выбор района
-    if (tg && window.location.protocol !== 'https:') {
-        if (locationBtn) {
-            locationBtn.textContent = '🏘️ Выберите район';
-        }
-        setTimeout(() => {
-            showDistrictSelector();
-        }, 500);
+    // Добавляем специальную обработку для Telegram
+    if (tg) {
+        console.log('=== TELEGRAM WEBAPP DETECTED ===');
+        console.log('Platform:', tg.platform);
+        console.log('Version:', tg.version);
+        console.log('User:', user);
+        
+        // В Telegram используем особый подход
+        showTelegramLocationDialog();
         return;
     }
     
+    // Обычная версия для браузера
     const locationModalHTML = `
         <div id="locationModal" style="
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -1350,6 +1361,110 @@ function debugLocation() {
             { timeout: 10000 }
         );
     }
+}
+function showTelegramLocationDialog() {
+    const locationModalHTML = `
+        <div id="locationModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+            ">
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Укажите местоположение</h3>
+                
+                <p style="color: #666; margin: 0 0 20px 0; text-align: center; font-size: 14px;">
+                    В Telegram WebApp лучше выбрать район вручную для стабильной работы
+                </p>
+                
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <button onclick="requestLocationInTelegram()" style="
+                        padding: 14px 20px; background: #4CAF50; color: white;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">📍 Попробовать GPS</button>
+                    
+                    <button onclick="showDistrictSelector()" style="
+                        padding: 14px 20px; background: #2196F3; color: white;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">🏘️ Выбрать район (рекомендуется)</button>
+                    
+                    <button onclick="closeLocationModal()" style="
+                        padding: 14px 20px; background: #f0f0f0; color: #333;
+                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+                    ">Отмена</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', locationModalHTML);
+}
+
+function requestLocationInTelegram() {
+    closeLocationModal();
+    
+    const locationBtn = document.getElementById('locationBtn');
+    if (locationBtn) {
+        locationBtn.textContent = '⏳ Пробуем...';
+    }
+    
+    console.log('=== ПОПЫТКА ПОЛУЧИТЬ ГЕОЛОКАЦИЮ В TELEGRAM ===');
+    
+    if (!navigator.geolocation) {
+        console.log('navigator.geolocation не поддерживается');
+        if (locationBtn) locationBtn.textContent = '❌ Не поддерживается';
+        setTimeout(() => showDistrictSelector(), 1500);
+        return;
+    }
+    
+    const options = {
+        enableHighAccuracy: false, // Менее строгие требования для Telegram
+        timeout: 15000,
+        maximumAge: 600000
+    };
+    
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            console.log('=== УСПЕХ В TELEGRAM ===');
+            console.log('Координаты получены:', position);
+            
+            userCoordinates = {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude
+            };
+            userManualLocation = null;
+            
+            const accuracy = position.coords.accuracy;
+            const lat = position.coords.latitude.toFixed(4);
+            const lon = position.coords.longitude.toFixed(4);
+            
+            if (locationBtn) {
+                locationBtn.textContent = `✅ GPS: ${lat}, ${lon}`;
+            }
+            
+            updateServicesWithDistance();
+            
+            localStorage.setItem('userLocation', JSON.stringify({
+                type: 'coordinates',
+                data: userCoordinates,
+                accuracy: accuracy,
+                timestamp: Date.now()
+            }));
+        },
+        (error) => {
+            console.log('=== ОШИБКА В TELEGRAM ===');
+            console.log('Error:', error);
+            
+            if (locationBtn) locationBtn.textContent = '❌ Не получилось';
+            
+            setTimeout(() => {
+                alert('В Telegram WebApp геолокация работает нестабильно. Выберите район вручную для лучшего опыта.');
+                showDistrictSelector();
+            }, 1000);
+        },
+        options
+    );
 }
 
 // Добавьте эту функцию в конец файла
