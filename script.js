@@ -1303,32 +1303,33 @@ function showMapLinkInput() {
             <div style="
                 background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
             ">
-                <h3 style="margin: 0 0 16px 0; text-align: center;">Координаты</h3>
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Координаты с карты</h3>
                 
                 <p style="color: #666; font-size: 14px; margin: 0 0 16px 0;">
-                    Способ 1: Откройте карту и скопируйте координаты:
+                    <strong>На ПК:</strong> Правый клик → "Координаты" или "Что здесь?"<br>
+                    <strong>На мобильном:</strong> Долгое нажатие → координаты появятся внизу
                 </p>
                 
                 <div style="margin-bottom: 16px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
                     <div style="margin-bottom: 8px;">
                         <a href="https://yandex.ru/maps" target="_blank" style="color: #2196F3; text-decoration: none;">
                             📍 Яндекс Карты
-                        </a> - найдите место → клик правой кнопкой → "Что здесь?"
+                        </a>
                     </div>
                     <div style="margin-bottom: 8px;">
                         <a href="https://maps.google.com" target="_blank" style="color: #2196F3; text-decoration: none;">
                             📍 Google Maps
-                        </a> - найдите место → долгий клик → координаты внизу
+                        </a>
                     </div>
                     <div>
                         <a href="https://2gis.ru" target="_blank" style="color: #2196F3; text-decoration: none;">
                             📍 2GIS
-                        </a> - найдите место → клик правой кнопкой → "Координаты"
+                        </a>
                     </div>
                 </div>
                 
                 <p style="color: #666; font-size: 14px; margin: 0 0 8px 0;">
-                    Способ 2: Введите координаты (широта, долгота):
+                    Введите координаты (широта, долгота):
                 </p>
                 
                 <input type="text" id="coordinatesInput" placeholder="55.7558, 37.6176" style="
@@ -1439,8 +1440,13 @@ function showCitySelector() {
             ">
                 <h3 style="margin: 0 0 16px 0; text-align: center;">Выберите город</h3>
                 
-                <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
-                    ${Object.keys(CITIES_DATA).map(city => `
+                <input type="text" id="citySearchInput" placeholder="Поиск города..." style="
+                    width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
+                    margin-bottom: 16px; font-size: 14px;
+                " oninput="searchCitiesLive(this.value)">
+                
+                <div id="citiesResults" style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+                    ${Object.keys(RUSSIA_CITIES).map(city => `
                         <button onclick="selectCity('${city}')" style="
                             padding: 12px 16px; background: #f8f9fa; border: 1px solid #e0e0e0;
                             border-radius: 8px; text-align: left; cursor: pointer; transition: all 0.2s;
@@ -1465,17 +1471,26 @@ function showCitySelector() {
 function selectCity(city) {
     closeCityModal();
     
-    if (city === 'Другой город') {
-        showManualLocationInput();
-        return;
+    const cityData = RUSSIA_CITIES[city];
+    if (cityData && cityData.districts.length > 0) {
+        // Показываем выбор района для известного города
+        showLocationOptionsForCity(city, cityData);
+    } else {
+        // Просто устанавливаем город
+        setJustCity(city);
     }
-    
-    const cityData = CITIES_DATA[city];
-    if (!cityData) return;
-    
-    // Показываем выбор района/метро для выбранного города
-    showLocationOptionsForCity(city, cityData);
 }
+
+function selectFoundCity(cityName, isLocal) {
+    closeCityModal();
+    
+    if (isLocal) {
+        selectCity(cityName);
+    } else {
+        // Для найденного через API города просто устанавливаем название
+        setJustCity(cityName);
+    }
+}}
 
 function showLocationOptionsForCity(city, cityData) {
     const optionsHTML = `
@@ -1491,18 +1506,11 @@ function showLocationOptionsForCity(city, cityData) {
                 <h3 style="margin: 0 0 16px 0; text-align: center;">${city}</h3>
                 
                 <div style="display: flex; flex-direction: column; gap: 12px;">
-                    ${cityData.districts.length > 0 ? `
-                    <button onclick="showDistrictSelector('${city}')" style="
+                    ${cityData.districts && cityData.districts.length > 0 ? `
+                    <button onclick="showDistrictSelectorForCity('${city}')" style="
                         padding: 14px 20px; background: #2196F3; color: white;
                         border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
                     ">🏘️ Выбрать район</button>
-                    ` : ''}
-                    
-                    ${cityData.metro.length > 0 ? `
-                    <button onclick="showMetroSelector('${city}')" style="
-                        padding: 14px 20px; background: #FF9800; color: white;
-                        border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
-                    ">🚇 Ближайшее метро</button>
                     ` : ''}
                     
                     <button onclick="setJustCity('${city}')" style="
@@ -1520,6 +1528,66 @@ function showLocationOptionsForCity(city, cityData) {
     `;
     
     document.body.insertAdjacentHTML('beforeend', optionsHTML);
+}
+
+function showDistrictSelectorForCity(city) {
+    closeLocationOptionsModal();
+    
+    const cityData = RUSSIA_CITIES[city];
+    if (!cityData || !cityData.districts) return;
+    
+    const districtHTML = `
+        <div id="districtModal" style="
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+            z-index: 1000;
+        ">
+            <div style="
+                background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
+                max-height: 80vh; overflow-y: auto;
+            ">
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Районы - ${city}</h3>
+                
+                <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+                    ${cityData.districts.map(district => `
+                        <button onclick="selectDistrictInCity('${city}', '${district}')" style="
+                            padding: 12px 16px; background: #f8f9fa; border: 1px solid #e0e0e0;
+                            border-radius: 8px; text-align: left; cursor: pointer; transition: all 0.2s;
+                        " onmouseover="this.style.background='#e8f5e8'; this.style.borderColor='#4CAF50'"
+                           onmouseout="this.style.background='#f8f9fa'; this.style.borderColor='#e0e0e0'">
+                            ${district}
+                        </button>
+                    `).join('')}
+                </div>
+                
+                <button onclick="closeDistrictModal()" style="
+                    width: 100%; margin-top: 16px; padding: 12px; background: #f0f0f0; color: #333;
+                    border: none; border-radius: 8px; cursor: pointer;
+                ">Назад</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', districtHTML);
+}
+
+function selectDistrictInCity(city, district) {
+    closeDistrictModal();
+    
+    userLocation = `${city}, ${district}`;
+    
+    const locationBtn = document.getElementById('locationBtn');
+    if (locationBtn) {
+        locationBtn.textContent = `🏘️ ${district}, ${city}`;
+    }
+    
+    updateServicesWithDistance();
+    
+    localStorage.setItem('userLocation', JSON.stringify({
+        type: 'district',
+        data: `${city}, ${district}`,
+        timestamp: Date.now()
+    }));
 }
 
 function showManualLocationInput() {
@@ -1726,4 +1794,75 @@ async function searchCities(query) {
         console.error('Ошибка поиска городов:', error);
         return [];
     }
+}
+
+let searchTimeout = null;
+
+async function searchCitiesLive(query) {
+    const resultsDiv = document.getElementById('citiesResults');
+    
+    // Очищаем предыдущий таймаут
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+    }
+    
+    // Если поле пустое, показываем основные города
+    if (!query.trim()) {
+        resultsDiv.innerHTML = Object.keys(RUSSIA_CITIES).map(city => `
+            <button onclick="selectCity('${city}')" style="
+                padding: 12px 16px; background: #f8f9fa; border: 1px solid #e0e0e0;
+                border-radius: 8px; text-align: left; cursor: pointer; transition: all 0.2s;
+            " onmouseover="this.style.background='#e8f5e8'; this.style.borderColor='#4CAF50'"
+               onmouseout="this.style.background='#f8f9fa'; this.style.borderColor='#e0e0e0'">
+                ${city}
+            </button>
+        `).join('');
+        return;
+    }
+    
+    // Задержка для предотвращения частых запросов
+    searchTimeout = setTimeout(async () => {
+        if (query.length < 2) return;
+        
+        resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">Поиск...</div>';
+        
+        try {
+            // Сначала ищем в наших городах
+            const localResults = Object.keys(RUSSIA_CITIES)
+                .filter(city => city.toLowerCase().includes(query.toLowerCase()))
+                .map(city => ({ name: city, isLocal: true }));
+            
+            // Затем ищем через API
+            const apiResults = await searchCities(query);
+            
+            // Объединяем результаты (локальные первыми)
+            const allResults = [
+                ...localResults,
+                ...apiResults.filter(apiCity => 
+                    !localResults.some(localCity => localCity.name === apiCity.name)
+                )
+            ];
+            
+            if (allResults.length === 0) {
+                resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">Города не найдены</div>';
+                return;
+            }
+            
+            resultsDiv.innerHTML = allResults.slice(0, 10).map(city => `
+                <button onclick="selectFoundCity('${city.name}', ${city.isLocal || false})" style="
+                    padding: 12px 16px; background: #f8f9fa; border: 1px solid #e0e0e0;
+                    border-radius: 8px; text-align: left; cursor: pointer; transition: all 0.2s;
+                    display: flex; justify-content: space-between; align-items: center;
+                " onmouseover="this.style.background='#e8f5e8'; this.style.borderColor='#4CAF50'"
+                   onmouseout="this.style.background='#f8f9fa'; this.style.borderColor='#e0e0e0'">
+                    <span>${city.name}</span>
+                    <span style="font-size: 12px; color: #999;">${city.isLocal ? 'популярный' : 'найден'}</span>
+                </button>
+            `).join('');
+            
+        } catch (error) {
+            console.error('Ошибка поиска городов:', error);
+            resultsDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #ff6b6b;">Ошибка поиска</div>';
+        }
+    }, 500); // Задержка 500мс
 }
