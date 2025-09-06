@@ -13,23 +13,29 @@ const GOOGLE_SHEETS_CONFIG = {
 let userLocation = null;
 
 
-const CITIES_DATA = {
-    'Нижний Новгород': {
-        districts: ['Центральный', 'Северный', 'Южный', 'Восточный', 'Западный', 'Советский', 'Ленинский', 'Октябрьский', 'Железнодорожный', 'Автозаводский', 'Московский', 'Приокский', 'Канавинский'],
-        metro: ['Автозаводская', 'Парк Культуры', 'Московская', 'Чкаловская', 'Ленинская', 'Заречная', 'Буревестник', 'Бурнаковская', 'Кировская', 'Пролетарская', 'Горьковская']
-    },
+// Основные города России с районами (выборочно)
+const RUSSIA_CITIES = {
     'Москва': {
-        districts: ['Центральный', 'Северный', 'Южный', 'Восточный', 'Западный', 'Северо-Восточный', 'Северо-Западный', 'Юго-Восточный', 'Юго-Западный', 'Зеленоградский'],
-        metro: ['Красная площадь', 'Арбатская', 'Театральная', 'Охотный ряд', 'Лубянка', 'Китай-город', 'Кузнецкий мост', 'Пушкинская', 'Тверская', 'Маяковская']
+        districts: ['ЦАО', 'САО', 'СВАО', 'ВАО', 'ЮВАО', 'ЮАО', 'ЮЗАО', 'ЗАО', 'СЗАО', 'Зеленоград'],
+        coords: [55.7558, 37.6176]
     },
     'Санкт-Петербург': {
-        districts: ['Центральный', 'Адмиралтейский', 'Василеостровский', 'Выборгский', 'Калининский', 'Кировский', 'Колпинский', 'Красногвардейский', 'Красносельский', 'Московский'],
-        metro: ['Невский проспект', 'Гостиный двор', 'Маяковская', 'Площадь Восстания', 'Владимирская', 'Пушкинская', 'Технологический институт', 'Сенная площадь']
+        districts: ['Адмиралтейский', 'Василеостровский', 'Выборгский', 'Калининский', 'Кировский', 'Колпинский', 'Красногвардейский', 'Красносельский', 'Московский', 'Невский', 'Петроградский', 'Петродворцовый', 'Приморский', 'Пушкинский', 'Фрунзенский', 'Центральный', 'Курортный', 'Кронштадтский'],
+        coords: [59.9311, 30.3609]
     },
-    'Другой город': {
-        districts: [],
-        metro: []
+    'Нижний Новгород': {
+        districts: ['Автозаводский', 'Ленинский', 'Московский', 'Нижегородский', 'Приокский', 'Советский', 'Сормовский', 'Канавинский'],
+        coords: [56.3287, 44.0020]
+    },
+    'Екатеринбург': {
+        districts: ['Ленинский', 'Октябрьский', 'Чкаловский', 'Железнодорожный', 'Орджоникидзевский', 'Кировский', 'Верх-Исетский'],
+        coords: [56.8431, 60.6454]
+    },
+    'Казань': {
+        districts: ['Авиастроительный', 'Вахитовский', 'Кировский', 'Московский', 'Ново-Савиновский', 'Приволжский', 'Советский'],
+        coords: [55.8304, 49.0661]
     }
+    // Добавьте нужные города...
 };
 
 // Примерные координаты районов (широта, долгота)
@@ -1285,7 +1291,6 @@ function closeMetroModal() {
     if (modal) modal.remove();
 }
 
-// Ввод ссылки с карты
 function showMapLinkInput() {
     closeLocationModal();
     
@@ -1298,23 +1303,44 @@ function showMapLinkInput() {
             <div style="
                 background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px;
             ">
-                <h3 style="margin: 0 0 16px 0; text-align: center;">Ссылка с карты</h3>
+                <h3 style="margin: 0 0 16px 0; text-align: center;">Координаты</h3>
                 
                 <p style="color: #666; font-size: 14px; margin: 0 0 16px 0;">
-                    Откройте карту (Яндекс, Google, 2ГИС), найдите ваше местоположение, 
-                    нажмите "Поделиться" и вставьте ссылку:
+                    Способ 1: Откройте карту и скопируйте координаты:
                 </p>
                 
-                <input type="text" id="mapLinkInput" placeholder="Вставьте ссылку сюда..." style="
+                <div style="margin-bottom: 16px; padding: 12px; background: #f8f9fa; border-radius: 8px;">
+                    <div style="margin-bottom: 8px;">
+                        <a href="https://yandex.ru/maps" target="_blank" style="color: #2196F3; text-decoration: none;">
+                            📍 Яндекс Карты
+                        </a> - найдите место → клик правой кнопкой → "Что здесь?"
+                    </div>
+                    <div style="margin-bottom: 8px;">
+                        <a href="https://maps.google.com" target="_blank" style="color: #2196F3; text-decoration: none;">
+                            📍 Google Maps
+                        </a> - найдите место → долгий клик → координаты внизу
+                    </div>
+                    <div>
+                        <a href="https://2gis.ru" target="_blank" style="color: #2196F3; text-decoration: none;">
+                            📍 2GIS
+                        </a> - найдите место → клик правой кнопкой → "Координаты"
+                    </div>
+                </div>
+                
+                <p style="color: #666; font-size: 14px; margin: 0 0 8px 0;">
+                    Способ 2: Введите координаты (широта, долгота):
+                </p>
+                
+                <input type="text" id="coordinatesInput" placeholder="55.7558, 37.6176" style="
                     width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
                     margin-bottom: 16px; font-size: 14px;
                 ">
                 
                 <div style="display: flex; gap: 12px;">
-                    <button onclick="parseMapLink()" style="
+                    <button onclick="parseCoordinates()" style="
                         flex: 1; padding: 12px; background: #4CAF50; color: white;
                         border: none; border-radius: 8px; font-weight: 600;
-                    ">Определить</button>
+                    ">Определить адрес</button>
                     <button onclick="closeMapLinkModal()" style="
                         flex: 1; padding: 12px; background: #f0f0f0; color: #333;
                         border: none; border-radius: 8px; font-weight: 600;
@@ -1590,4 +1616,114 @@ function closeLocationOptionsModal() {
 function closeManualLocationModal() {
     const modal = document.getElementById('manualLocationModal');
     if (modal) modal.remove();
+}
+
+
+async function parseCoordinates() {
+    const input = document.getElementById('coordinatesInput');
+    const coords = input.value.trim();
+    
+    if (!coords) {
+        alert('Введите координаты');
+        return;
+    }
+    
+    // Парсим координаты
+    const coordMatch = coords.match(/([0-9.-]+)[,\s]+([0-9.-]+)/);
+    if (!coordMatch) {
+        alert('Неверный формат. Используйте: 55.7558, 37.6176');
+        return;
+    }
+    
+    const lat = parseFloat(coordMatch[1]);
+    const lon = parseFloat(coordMatch[2]);
+    
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        alert('Координаты вне допустимых пределов');
+        return;
+    }
+    
+    const locationBtn = document.getElementById('locationBtn');
+    if (locationBtn) locationBtn.textContent = '⏳ Определяем адрес...';
+    
+    try {
+        // Используем бесплатный API Nominatim (OpenStreetMap)
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&accept-language=ru`);
+        const data = await response.json();
+        
+        let address = 'Неизвестное место';
+        
+        if (data && data.display_name) {
+            // Извлекаем нужные части адреса
+            const parts = [];
+            if (data.address) {
+                if (data.address.road) parts.push(data.address.road);
+                if (data.address.suburb || data.address.neighbourhood) {
+                    parts.push(data.address.suburb || data.address.neighbourhood);
+                }
+                if (data.address.city || data.address.town) {
+                    parts.push(data.address.city || data.address.town);
+                }
+            }
+            
+            address = parts.length > 0 ? parts.join(', ') : data.display_name.split(',')[0];
+        }
+        
+        userLocation = address;
+        
+        if (locationBtn) {
+            locationBtn.textContent = `📍 ${address}`;
+        }
+        
+        updateServicesWithDistance();
+        
+        localStorage.setItem('userLocation', JSON.stringify({
+            type: 'coordinates',
+            data: { lat, lon, address },
+            timestamp: Date.now()
+        }));
+        
+        closeMapLinkModal();
+        
+    } catch (error) {
+        console.error('Ошибка определения адреса:', error);
+        
+        // Fallback - сохраняем просто координаты
+        userLocation = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+        
+        if (locationBtn) {
+            locationBtn.textContent = `📍 ${userLocation}`;
+        }
+        
+        updateServicesWithDistance();
+        
+        localStorage.setItem('userLocation', JSON.stringify({
+            type: 'coordinates',
+            data: { lat, lon },
+            timestamp: Date.now()
+        }));
+        
+        closeMapLinkModal();
+    }
+}
+
+
+// Функция поиска городов через API (по мере ввода)
+async function searchCities(query) {
+    if (query.length < 3) return [];
+    
+    try {
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)},Russia&limit=10&accept-language=ru`);
+        const data = await response.json();
+        
+        return data
+            .filter(item => item.type === 'administrative' || item.class === 'place')
+            .map(item => ({
+                name: item.display_name.split(',')[0],
+                coords: [parseFloat(item.lat), parseFloat(item.lon)]
+            }));
+    } catch (error) {
+        console.error('Ошибка поиска городов:', error);
+        return [];
+    }
 }
